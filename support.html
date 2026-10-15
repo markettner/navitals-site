@@ -13,21 +13,22 @@
     <link rel="apple-touch-icon" href="icon.png">
     <link rel="preload" href="fonts/fredoka-latin.woff" as="font" type="font/woff" crossorigin>
     <link rel="stylesheet" href="styles.css">
-    <script src="trailmap.js" defer></script>
+    <script src="trailmap.js"></script>
 </head>
 
 <body>
     <canvas class="trail-map" data-trail-map aria-hidden="true"></canvas>
+    <script>NavitalsTrailMap.mount();</script>
 
     <header class="wrap site-header">
         <div class="site-bar glass">
-            <a href="index.html" class="brand">
+            <a href="./" class="brand">
                 <img src="icon.png" alt="" width="44" height="44">
                 Navitals
             </a>
             <nav class="site-nav" aria-label="Main">
                 <div class="nav-pages">
-                    <a href="index.html">Overview</a>
+                    <a href="./">Overview</a>
                     <a href="features.html">Features</a>
                     <a href="support.html" aria-current="page">Support</a>
                 </div>

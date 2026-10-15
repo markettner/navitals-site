@@ -3,8 +3,10 @@
    network of roads and trails), then keeps planning a random route from one edge to the opposite one,
    finds the shortest way along the network, and lets the heart ride it.
 
-   Usage: <canvas class="trail-map" data-trail-map aria-hidden="true"></canvas> anywhere in <body>, plus this
-   script. Every visit gets a new map and new routes. Options as data attributes on the canvas:
+   Usage: <script src="trailmap.js"></script> in <head> (not deferred), then first in <body>
+   <canvas class="trail-map" data-trail-map aria-hidden="true"></canvas><script>NavitalsTrailMap.mount();</script>
+   so the map is drawn before the page's first paint and switching pages never shows the bare background.
+   Every visit gets a new map and new routes. Options as data attributes on the canvas:
    data-seed (pins one map, e.g. for screenshots), data-density (road spacing, px), data-speed (px/s).
    Day or night follows the system appearance. No dependencies. */
 (function () {
@@ -151,10 +153,13 @@
         }
       };
 
+      // Built right away, so the first frame already has the map: switching pages never shows the bare
+      // background. Resizes rebuild once the size settles (and not for the observer's first report).
+      build();
       let tmr = 0;
-      const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { clearTimeout(tmr); tmr = setTimeout(build, 120); }) : null;
+      const rebuildIfResized = () => { const r = canvas.getBoundingClientRect(); if (r.width !== st.w || r.height !== st.h) build(); };
+      const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { clearTimeout(tmr); tmr = setTimeout(rebuildIfResized, 120); }) : null;
       if (ro) ro.observe(canvas);
-      tmr = setTimeout(build, 30); // let the page paint first
       st.raf = requestAnimationFrame(frame);
       return {
         stop: () => { cancelAnimationFrame(st.raf); clearTimeout(tmr); if (ro) ro.disconnect(); },
@@ -471,10 +476,13 @@
       const lake0 = water.find((b) => b.lake);
       if (lake0) {
         const toEdge = [[-1, 0, lake0.x], [1, 0, W - lake0.x], [0, -1, lake0.y], [0, 1, H - lake0.y]].sort((p, q) => p[2] - q[2])[Math.floor(rnd() * 2)];
-        let x = lake0.x, y = lake0.y, h = Math.atan2(toEdge[1], toEdge[0]) + (rnd() - 0.5) * 0.6;
+        // The heading swings around one main direction, never more than ~55° off it: the stream meanders
+        // but always moves on, away from the lake, so it can't loop, cross itself or flow back.
+        const h0 = Math.atan2(toEdge[1], toEdge[0]) + (rnd() - 0.5) * 0.6, ph = rnd() * 200;
+        let x = lake0.x, y = lake0.y;
         const pts = [[x, y]];
         for (let i = 0; i < 1200; i++) {
-          h += nV(x / 220, y / 220) * 0.22;
+          const h = h0 + 0.95 * Math.max(-1, Math.min(1, fbm(nV, i * 8 / 280 + ph, 3.7, 2, 0.45) * 1.7));
           x += Math.cos(h) * 8; y += Math.sin(h) * 8; pts.push([x, y]);
           if (x < -40 || y < -40 || x > W + 40 || y > H + 40) break;
         }
@@ -552,6 +560,7 @@
     var canvases = document.querySelectorAll("canvas[data-trail-map]");
     for (var i = 0; i < canvases.length; i++) {
       (function (canvas) {
+        if (canvas.trailMap) return;
         var props = function () {
           return {
             style: dark && dark.matches ? "Night" : "Day",
@@ -560,7 +569,7 @@
             speed: Number(canvas.dataset.speed || 140)
           };
         };
-        var run = new TrailMap(props).start(canvas);
+        var run = canvas.trailMap = new TrailMap(props).start(canvas);
         if (dark) {
           var redraw = function () { run.rebuild(); };
           if (dark.addEventListener) dark.addEventListener("change", redraw); else if (dark.addListener) dark.addListener(redraw);
@@ -569,6 +578,7 @@
     }
   }
 
-  window.NavitalsTrailMap = { TrailMap: TrailMap };
+  window.NavitalsTrailMap = { TrailMap: TrailMap, mount: mountAll };
+  // Pages mount right after the canvas; this catches a page that doesn't.
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountAll); else mountAll();
 })();
