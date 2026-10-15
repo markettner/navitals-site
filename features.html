@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Features - Navitals</title>
+    <meta name="description"
+        content="Everything Navitals can do: a detailed trail map with cycling and hiking overlays, turn-by-turn navigation with your Apple Watch heart rate, planning on iPad and Mac, offline regions and a water lock for rainy rides.">
+    <meta name="theme-color" content="#93CC3E" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0E1A10" media="(prefers-color-scheme: dark)">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://navitals.kettner.berlin/features.html">
+    <meta property="og:title" content="All Features - Navitals">
+    <meta property="og:description"
+        content="Everything Navitals can do: a detailed trail map with cycling and hiking overlays, turn-by-turn navigation with your Apple Watch heart rate, planning on iPad and Mac, offline regions and a water lock for rainy rides.">
+    <meta property="og:site_name" content="Navitals">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="All Features - Navitals">
+    <meta name="twitter:description"
+        content="Everything Navitals can do: a detailed trail map with cycling and hiking overlays, turn-by-turn navigation with your Apple Watch heart rate, planning on iPad and Mac, offline regions and a water lock for rainy rides.">
+
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="preload" href="fonts/fredoka-latin.woff" as="font" type="font/woff" crossorigin>
+    <link rel="stylesheet" href="styles.css">
+    <script src="trailmap.js" defer></script>
+</head>
+
+<body>
+    <canvas class="trail-map" data-trail-map aria-hidden="true"></canvas>
+
+    <header class="wrap site-header">
+        <div class="site-bar glass">
+            <a href="index.html" class="brand">
+                <img src="icon.png" alt="" width="44" height="44">
+                Navitals
+            </a>
+            <nav class="site-nav" aria-label="Main">
+                <div class="nav-pages">
+                    <a href="index.html">Overview</a>
+                    <a href="features.html" aria-current="page">Features</a>
+                    <a href="support.html">Support</a>
+                </div>
+                <a href="https://apps.apple.com/app/id0000000000" class="nav-cta" target="_blank" rel="noopener noreferrer">Get the app</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="wrap-narrow page-header" id="top">
+            <div class="glass">
+                <a href="#changelog" class="eyebrow-pill">Everything in Navitals [1.0]</a>
+                <h1>Everything for the ride,<br> <span class="accent nowrap">and the rider.</span></h1>
+                <p class="lead">From the smallest trail on the map to the beat of your heart — here’s everything Navitals can do.</p>
+                <nav class="pill-row" aria-label="On this page">
+                    <a href="#map" class="pill">Map</a>
+                    <a href="#navigation" class="pill">Navigation</a>
+                    <a href="#vitals" class="pill">Vitals</a>
+                    <a href="#planning" class="pill">Planning</a>
+                    <a href="#offline" class="pill">Offline</a>
+                    <a href="#battery" class="pill">Battery life</a>
+                    <a href="#rain" class="pill">Water lock</a>
+                    <a href="#devices" class="pill">Devices</a>
+                    <a href="#all" class="pill">All features</a>
+                    <a href="#changelog" class="pill">What’s new</a>
+                </nav>
+            </div>
+        </section>
+
+        <section class="wrap spot" id="map">
+            <div class="spot-card glass">
+                <div class="spot-head">
+                    <span class="spot-no">01</span>
+                    <span class="kicker">The map</span>
+                </div>
+                <h2>A map that knows the trails</h2>
+                <p>A detailed map in bright summer colours by day, with every gravel track, forest path and narrow trail on it. At night it turns dusky for city rides, or pitch black for the darkest forest.</p>
+                <ul class="checklist">
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Every trail and track, not just the roads</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Overlays for official cycling and hiking routes, to follow one or plan along it</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Summer colours by day; dusky or pitch black at night</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>A bold red route you can always pick out</span></li>
+                </ul>
+            </div>
+            <div class="spot-visual">
+                <div class="phone placeholder">The map: trails, forest paths and an official cycle route overlay</div>
+            </div>
+        </section>
+
+        <section class="wrap spot reverse" id="navigation">
+            <div class="spot-card glass">
+                <div class="spot-head">
+                    <span class="spot-no">02</span>
+                    <span class="kicker">Navigation</span>
+                </div>
+                <h2>Eyes on the trail, not the screen</h2>
+                <p>Clear turn-by-turn directions on the map, spoken out loud, and on your Lock Screen. Take a wrong turn and Navitals guides you back to your route, or plans a new way from where you are, if you’d rather.</p>
+                <ul class="checklist">
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Spoken turn-by-turn directions</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>The next turn as a Live Activity on your Lock Screen</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Off route? Back to your route, or a fresh one, your choice</span></li>
+                </ul>
+            </div>
+            <div class="spot-visual">
+                <div class="phone placeholder">Navigation: the next turn on a route through town</div>
+            </div>
+        </section>
+
+        <section class="wrap spot" id="vitals">
+            <div class="spot-card glass">
+                <div class="spot-head">
+                    <span class="spot-no">03</span>
+                    <span class="kicker">Vitals</span>
+                </div>
+                <h2>Your heart rate, beside the next turn</h2>
+                <p>Start a ride and your Apple Watch records it as a workout. Heart rate, zones, calories and the distance left sit right on the navigation screen, so you never have to switch apps to check on yourself.</p>
+                <ul class="checklist">
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Heart-rate zones based on your own resting and maximum heart rate</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>No watch? A Bluetooth chest strap works too</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Every ride saved to Apple Health, with the weather you rode in</span></li>
+                </ul>
+            </div>
+            <div class="spot-visual">
+                <div class="phone placeholder">Navigation with heart rate, zones and calories</div>
+            </div>
+        </section>
+
+        <section class="wrap spot reverse" id="planning">
+            <div class="spot-card glass">
+                <div class="spot-head">
+                    <span class="spot-no">04</span>
+                    <span class="kicker">Planning</span>
+                </div>
+                <h2>Routes made for the way you ride</h2>
+                <p>Pick a profile and Navitals plans a route that suits it: quiet cycle paths for a day out, fast tarmac for the road bike, rough tracks for gravel and mountain bikes, or footpaths for a hike. Plan on your iPhone, or on your Mac, where you shape the route with a mouse.</p>
+                <div class="pill-row profiles" aria-label="Routing profiles">
+                    <span class="pill">Trekking</span>
+                    <span class="pill">Road</span>
+                    <span class="pill">Gravel</span>
+                    <span class="pill">MTB</span>
+                    <span class="pill">Hiking</span>
+                </div>
+                <ul class="checklist">
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Trekking, road, gravel, mountain bike and hiking profiles</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Drag the route into shape on iPad or Mac, then ride it from your iPhone</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Import a GPX file from anywhere, and export your own</span></li>
+                </ul>
+            </div>
+            <div class="spot-visual">
+                <div class="phone placeholder">A planned round trip with its distance and profile</div>
+            </div>
+        </section>
+
+        <section class="wrap spot" id="offline">
+            <div class="spot-card glass">
+                <div class="spot-head">
+                    <span class="spot-no">05</span>
+                    <span class="kicker">Offline</span>
+                </div>
+                <h2>Works where your signal doesn’t</h2>
+                <p>Download the regions you ride in, and searching, planning and navigating all happen right on your iPhone. Deep in the forest, up in the mountains or across a border, nothing stops when the bars disappear.</p>
+                <ul class="checklist">
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Regions to download, suggested from where you are</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Search for places with no signal</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Plan, change and navigate routes fully offline</span></li>
+                </ul>
+            </div>
+            <div class="spot-visual">
+                <div class="phone placeholder">Downloading a region for offline use</div>
+            </div>
+        </section>
+
+        <section class="wrap spot reverse" id="battery">
+            <div class="spot-card glass">
+                <div class="spot-head">
+                    <span class="spot-no">06</span>
+                    <span class="kicker">Battery life</span>
+                </div>
+                <h2>Designed to go easy on your battery</h2>
+                <p>Your iPhone has to last the whole day, so saving power shaped how Navitals works. It doesn’t need the screen on to guide you, and when the screen is on, it asks less of it.</p>
+                <ul class="checklist">
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Screen off: spoken directions and the Live Activity guide you</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Screen on: a lower refresh rate while navigating</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>A truly dark night theme that’s easy on the battery and your eyes</span></li>
+                </ul>
+            </div>
+            <div class="spot-visual">
+                <div class="phone placeholder">Navigating at night with the dark theme</div>
+            </div>
+        </section>
+
+        <section class="wrap spot" id="rain">
+            <div class="spot-card glass">
+                <div class="spot-head">
+                    <span class="spot-no">07</span>
+                    <span class="kicker">Water lock</span>
+                </div>
+                <h2>Rain doesn’t get to steer</h2>
+                <p>Your iPhone handles rain just fine, its touchscreen less so. Raindrops pan the map, add stops and press buttons you never meant to, and that’s the last thing you need on a route you don’t know. Turn on the water lock and the screen ignores every drop while you keep navigating.</p>
+                <ul class="checklist">
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>One tap locks the screen, navigation carries on</span></li>
+                    <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Slide to unlock when you actually need it</span></li>
+                </ul>
+            </div>
+            <div class="spot-visual">
+                <div class="phone placeholder">Navigation with the water lock on</div>
+            </div>
+        </section>
+
+        <section class="wrap devices" id="devices" aria-labelledby="devices-title">
+            <div class="devices-panel glass">
+                <div class="devices-copy">
+                    <h2 id="devices-title">One app, <span class="accent">four screens</span></h2>
+                    <p>Navigation on the handlebar, vitals on the wrist, planning on iPad and Mac. Your routes follow you through your own iCloud, with no extra account to sign up for.</p>
+                    <div class="segmented" role="group" aria-label="Choose device">
+                        <button type="button" data-device="iphone" aria-pressed="true">iPhone</button>
+                        <button type="button" data-device="watch" aria-pressed="false">Apple Watch</button>
+                        <button type="button" data-device="ipad" aria-pressed="false">iPad</button>
+                        <button type="button" data-device="mac" aria-pressed="false">Mac</button>
+                    </div>
+                    <div class="device-detail" data-panel="iphone">
+                        <h3>The bike computer on your handlebar</h3>
+                        <p>The map, your route and the next turn on a big, bright screen, with your heart rate and the distance left right beside them.</p>
+                    </div>
+                    <div class="device-detail" data-panel="watch" hidden>
+                        <h3>The heart of the ride</h3>
+                        <p>Your Apple Watch records the ride as a workout and sends your heart rate to your iPhone, so it sits right next to the next turn.</p>
+                    </div>
+                    <div class="device-detail" data-panel="ipad" hidden>
+                        <h3>Plan on the big screen</h3>
+                        <p>The whole map with your route beside it, from the sofa or the campsite. Routes you plan on iPad are waiting on your iPhone.</p>
+                    </div>
+                    <div class="device-detail" data-panel="mac" hidden>
+                        <h3>Plan with a mouse</h3>
+                        <p>Shape your routes on the Mac by dragging them where you want to go, then find them on your iPhone, ready to ride.</p>
+                    </div>
+                </div>
+                <div class="devices-visual">
+                    <div class="phone placeholder" data-panel="iphone">iPhone: navigating a route</div>
+                    <div class="watch placeholder" data-panel="watch" hidden>Apple Watch: heart rate during a ride</div>
+                    <div class="ipad-frame placeholder" data-panel="ipad" hidden>iPad: planning a route</div>
+                    <div class="mac-frame placeholder" data-panel="mac" hidden>Mac: dragging a route into shape</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="wrap all" id="all">
+            <div class="all-head glass">
+                <h2 class="section-title">All features</h2>
+                <p>The complete list, at a glance.</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-tile glass"><h3>A detailed trail map</h3><p>Every trail, track and footpath.</p></div>
+                <div class="feature-tile glass"><h3>Day, dusk and night styles</h3><p>Summer colours or pitch black.</p></div>
+                <div class="feature-tile glass"><h3>Cycling and hiking overlays</h3><p>Official routes, one tap away.</p></div>
+                <div class="feature-tile glass"><h3>Five routing profiles</h3><p>Trekking, road, gravel, MTB and hiking.</p></div>
+                <div class="feature-tile glass"><h3>Turn-by-turn directions</h3><p>On the map, spoken, and on the Lock Screen.</p></div>
+                <div class="feature-tile glass"><h3>Live Activities</h3><p>The next turn on your Lock Screen.</p></div>
+                <div class="feature-tile glass"><h3>Back on route</h3><p>Back to your route, or a new one if you prefer.</p></div>
+                <div class="feature-tile glass"><h3>Apple Watch heart rate</h3><p>Live, with your own zones.</p></div>
+                <div class="feature-tile glass"><h3>Chest straps</h3><p>Bluetooth heart-rate straps work too.</p></div>
+                <div class="feature-tile glass"><h3>Apple Health</h3><p>Every ride saved as a workout.</p></div>
+                <div class="feature-tile glass"><h3>Weather on every ride</h3><p>Saved with each workout.</p></div>
+                <div class="feature-tile glass"><h3>Offline regions</h3><p>Search, plan and navigate with no signal.</p></div>
+                <div class="feature-tile glass"><h3>Easy on the battery</h3><p>Screen-off guidance, lower refresh rate.</p></div>
+                <div class="feature-tile glass"><h3>Water lock</h3><p>Rain can’t pan, tap or add stops.</p></div>
+                <div class="feature-tile glass"><h3>Plan on iPad and Mac</h3><p>Drag routes into shape, synced via iCloud.</p></div>
+                <div class="feature-tile glass"><h3>GPX import and export</h3><p>Bring routes from anywhere, share them back.</p></div>
+                <div class="feature-tile glass"><h3>No account needed</h3><p>Your rides stay with you.</p></div>
+            </div>
+        </section>
+
+        <section class="changelog" id="changelog">
+            <div class="glass">
+                <h2 class="section-title">What’s new</h2>
+                <div class="release">
+                    <div class="release-version">[1.0]</div>
+                    <div class="release-body">
+                        <div class="release-date">[RELEASE DATE]</div>
+                        <ul>
+                            <li>First release: map, routing, vitals and water lock</li>
+                            <li>[HIGHLIGHT]</li>
+                            <li>[HIGHLIGHT]</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="wrap cta">
+            <div class="cta-card">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>
+                <h2>Your next ride starts here.</h2>
+                <p>On iPhone, iPad, Mac and Apple Watch.</p>
+                <a href="https://apps.apple.com/app/id0000000000" class="app-store-badge" target="_blank" rel="noopener noreferrer">
+                    <img src="app-store-badge.svg" alt="Download on the App Store">
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="wrap site-footer">
+        <div class="footer-card glass">
+            <div class="footer-links">
+                <a href="privacy_policy.html">Privacy Policy</a>
+                <a href="support.html">Contact / Support</a>
+            </div>
+            <div class="footer-legal">
+                <span>© <script>document.write(new Date().getFullYear())</script> Markus Kettner</span>
+                <span>App screenshots: map data © OpenStreetMap contributors</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Device switcher: toggles the copy + screenshot panels for iPhone / Apple Watch / iPad / Mac.
+        (function () {
+            var buttons = document.querySelectorAll('.segmented [data-device]');
+            var panels = document.querySelectorAll('.devices [data-panel]');
+            buttons.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var device = btn.getAttribute('data-device');
+                    buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b === btn)); });
+                    panels.forEach(function (p) { p.hidden = p.getAttribute('data-panel') !== device; });
+                });
+            });
+        })();
+    </script>
+</body>
+
+</html>

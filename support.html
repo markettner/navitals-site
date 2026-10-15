@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support - Navitals</title>
+    <meta name="description" content="Support information for the Navitals app.">
+    <meta name="theme-color" content="#93CC3E" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0E1A10" media="(prefers-color-scheme: dark)">
+
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="preload" href="fonts/fredoka-latin.woff" as="font" type="font/woff" crossorigin>
+    <link rel="stylesheet" href="styles.css">
+    <script src="trailmap.js" defer></script>
+</head>
+
+<body>
+    <canvas class="trail-map" data-trail-map aria-hidden="true"></canvas>
+
+    <header class="wrap site-header">
+        <div class="site-bar glass">
+            <a href="index.html" class="brand">
+                <img src="icon.png" alt="" width="44" height="44">
+                Navitals
+            </a>
+            <nav class="site-nav" aria-label="Main">
+                <div class="nav-pages">
+                    <a href="index.html">Overview</a>
+                    <a href="features.html">Features</a>
+                    <a href="support.html" aria-current="page">Support</a>
+                </div>
+                <a href="https://apps.apple.com/app/id0000000000" class="nav-cta" target="_blank" rel="noopener noreferrer">Get the app</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="wrap-narrow text-page">
+        <header class="text-header glass">
+            <div class="kicker">Support</div>
+            <h1>Tell me how the ride <span class="accent nowrap">went.</span></h1>
+            <p class="lead">Navitals is a passion project by an independent developer. I can’t offer one-to-one support, but I genuinely value your feedback.</p>
+        </header>
+
+        <section class="prose-card glass" id="review">
+            <h2>Leave a review</h2>
+            <p>Suggestions, feature requests, or something not working the way it should? Please leave a review on the App Store. I read every single one, and your feedback shapes what comes next in Navitals.</p>
+            <a href="https://apps.apple.com/app/id0000000000?action=write-review" class="btn btn-soft" target="_blank" rel="noopener noreferrer">
+                Write a review
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </a>
+        </section>
+
+        <section class="prose-card glass" id="privacy">
+            <h2>Your data</h2>
+            <p>Navitals has no accounts and no servers of its own, so there’s nothing to sign out of or request from me. How the app handles your rides, your location and your Health data is explained in the <a href="privacy_policy.html">Privacy Policy</a>.</p>
+        </section>
+
+        <p class="thanks"><span class="glass">Thank you for riding with Navitals!</span></p>
+    </main>
+
+    <footer class="wrap site-footer">
+        <div class="footer-card glass">
+            <div class="footer-links">
+                <a href="privacy_policy.html">Privacy Policy</a>
+                <a href="support.html">Contact / Support</a>
+            </div>
+            <div class="footer-legal">
+                <span>© <script>document.write(new Date().getFullYear())</script> Markus Kettner</span>
+                <span>App screenshots: map data © OpenStreetMap contributors</span>
+            </div>
+        </div>
+    </footer>
+</body>
+
+</html>

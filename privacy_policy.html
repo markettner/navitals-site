@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Navitals</title>
+    <meta name="description" content="Privacy Policy for the Navitals app. No account, no analytics, no servers of its own: your rides stay on your devices and in your own iCloud.">
+    <meta name="theme-color" content="#93CC3E" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0E1A10" media="(prefers-color-scheme: dark)">
+
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="preload" href="fonts/fredoka-latin.woff" as="font" type="font/woff" crossorigin>
+    <link rel="stylesheet" href="styles.css">
+    <script src="trailmap.js" defer></script>
+</head>
+
+<body>
+    <canvas class="trail-map" data-trail-map aria-hidden="true"></canvas>
+
+    <header class="wrap site-header">
+        <div class="site-bar glass">
+            <a href="index.html" class="brand">
+                <img src="icon.png" alt="" width="44" height="44">
+                Navitals
+            </a>
+            <nav class="site-nav" aria-label="Main">
+                <div class="nav-pages">
+                    <a href="index.html">Overview</a>
+                    <a href="features.html">Features</a>
+                    <a href="support.html">Support</a>
+                </div>
+                <a href="https://apps.apple.com/app/id0000000000" class="nav-cta" target="_blank" rel="noopener noreferrer">Get the app</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="wrap-narrow text-page">
+        <header class="text-header glass">
+            <div class="kicker">Privacy Policy</div>
+            <h1>Your rides stay <span class="accent nowrap">yours.</span></h1>
+            <p class="lead">Navitals has no servers of its own, no accounts and no analytics. Your rides are recorded on your devices, your Health data stays in Apple Health, and your saved routes sync only through your own iCloud.</p>
+            <p class="text-meta">Last updated: [DATE]</p>
+            <ul class="checklist" aria-label="At a glance">
+                <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>No account and nothing to sign up for</span></li>
+                <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>No analytics, no ads, no tracking</span></li>
+                <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Routes are calculated on your iPhone, and work offline with map packs</span></li>
+                <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Your ride history never leaves your device, except as workouts in Apple Health</span></li>
+                <li><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Saved routes and places sync through your own private iCloud, which I can’t access</span></li>
+            </ul>
+        </header>
+
+        <section class="prose-card glass" id="location">
+            <h2>Your location</h2>
+            <p>Navitals uses your location while the app is in use, and during a ride also in the background, to show where you are, guide you along your route and record the ride. Your location is processed on your device. It leaves your device only in the cases described under <a href="#online">Online services</a>.</p>
+        </section>
+
+        <section class="prose-card glass" id="health">
+            <h2>Apple Health</h2>
+            <p>With your permission, Navitals reads from Apple Health:</p>
+            <ul>
+                <li>your heart rate and resting heart rate, active energy and workout effort, to show your vitals during a ride</li>
+                <li>your date of birth, sex, weight and height, to work out your heart-rate zones and, for rides with a chest strap, your calories</li>
+                <li>your workouts, their routes and distances, to show past rides</li>
+            </ul>
+            <p>When a ride ends, Navitals saves it to Apple Health as a workout, with its route, distance, heart rate, energy and effort. You choose what to allow when the app asks, and you can change it at any time in Settings → Privacy &amp; Security → Health → Navitals. Your Health data is never used for advertising or shared with anyone.</p>
+        </section>
+
+        <section class="prose-card glass" id="on-device">
+            <h2>What stays on your device</h2>
+            <p>Your ride history — distances, times, speeds, heart rate and the recorded track — is stored on your iPhone and isn’t synced anywhere. Routes are calculated on your iPhone by Navitals’ own routing engine. Heart rate from a Bluetooth chest strap goes straight from the strap to your iPhone.</p>
+        </section>
+
+        <section class="prose-card glass" id="icloud">
+            <h2>iCloud sync</h2>
+            <p>Your saved routes and places are kept in the private iCloud database of your Apple Account, so they appear on all your devices — for example, a route you plan on your Mac shows up on your iPhone. Apple stores this data under <a href="https://www.apple.com/legal/privacy/" target="_blank" rel="noopener noreferrer">Apple’s Privacy Policy</a>. Because it’s in your private database, only you can access it; I can’t see it. Your ride history isn’t part of it.</p>
+        </section>
+
+        <section class="prose-card glass" id="online">
+            <h2>Online services</h2>
+            <p>With map packs downloaded, Navitals plans and navigates without any connection. When you’re online, it uses these services, each of which receives your device’s IP address with the request:</p>
+            <ul>
+                <li><strong>Map tiles</strong> from <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>, for the area of the map you’re looking at.</li>
+                <li><strong>Search</strong> by <a href="https://photon.komoot.io" target="_blank" rel="noopener noreferrer">Photon</a> (komoot): what you type, and the centre of the map, so nearby results come first.</li>
+                <li><strong>Route details</strong> from the FOSSGIS Valhalla server: the line of a route, to look up its road surfaces and estimate how long it takes.</li>
+                <li><strong>Map packs and route overlays</strong>, downloaded from GitHub.</li>
+                <li><strong>Weather</strong> from Apple’s WeatherKit, for where a ride takes place, saved with the ride.</li>
+            </ul>
+            <p>None of these requests contain your name, an account or anything that identifies you beyond the IP address.</p>
+        </section>
+
+        <section class="prose-card glass" id="crash-reports">
+            <h2>Crash reports and statistics</h2>
+            <p>The app contains no analytics or tracking code. If you’ve chosen to share analytics with app developers in your device’s settings, Apple may give me anonymous crash reports and usage statistics. They don’t identify you, and you can turn this off at any time in Settings → Privacy &amp; Security → Analytics &amp; Improvements.</p>
+        </section>
+
+        <section class="prose-card glass" id="website">
+            <h2>This website</h2>
+            <p>This website doesn’t use cookies or analytics. It’s hosted on GitHub Pages, which processes your IP address to deliver the pages (see <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener noreferrer">GitHub’s privacy statement</a>). Everything else, fonts included, comes from this site itself. The map in the background is drawn by your browser and isn’t real map data.</p>
+        </section>
+
+        <section class="prose-card glass" id="changes">
+            <h2>Changes to this policy</h2>
+            <p>If the way Navitals handles data changes, I’ll update this page and the date at the top.</p>
+        </section>
+
+        <section class="prose-card glass" id="responsible">
+            <h2>Who’s responsible</h2>
+            <p>Navitals is made by Markus Kettner, an independent developer. Because the app never sends your data to me, there’s nothing I could look up, export or delete for you: everything lives on your devices, in Apple Health and in your own iCloud, where you can delete it at any time.</p>
+        </section>
+    </main>
+
+    <footer class="wrap site-footer">
+        <div class="footer-card glass">
+            <div class="footer-links">
+                <a href="privacy_policy.html">Privacy Policy</a>
+                <a href="support.html">Contact / Support</a>
+            </div>
+            <div class="footer-legal">
+                <span>© <script>document.write(new Date().getFullYear())</script> Markus Kettner</span>
+                <span>App screenshots: map data © OpenStreetMap contributors</span>
+            </div>
+        </div>
+    </footer>
+</body>
+
+</html>
