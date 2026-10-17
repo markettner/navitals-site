@@ -4,16 +4,21 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vitest run && vite build",
+    "build": "npm run check && vitest run && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "sync": "scripts/sync-from-app.sh"
+    "sync": "scripts/sync-from-app.sh",
+    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
   },
   "dependencies": {
-    "maplibre-gl": "6.11.2"
+    "maplibre-gl": "6.11.2",
+    "svelte": "5.57.1"
   },
   "devDependencies": {
-    "typescript": "7.0.2",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@types/geojson": "7946.0.16",
+    "svelte-check": "4.7.6",
+    "typescript": "6.0.3",
     "vite": "8.3.1",
     "vitest": "5.0.2"
   }

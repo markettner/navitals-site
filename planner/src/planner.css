@@ -35,6 +35,8 @@
     --selected: #FFFFFF;
     --selected-shadow: rgba(19, 35, 12, 0.18);
     --gutter: 16px;
+    --field: rgba(255, 255, 255, 0.7);
+    --route: #E03A3E;
     color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -52,6 +54,7 @@
         --chip-line: rgba(255, 255, 255, 0.1);
         --selected: rgba(255, 255, 255, 0.18);
         --selected-shadow: rgba(0, 0, 0, 0.3);
+        --field: rgba(255, 255, 255, 0.08);
     }
 }
 
@@ -81,7 +84,7 @@ body {
     position: fixed;
     top: var(--gutter);
     left: var(--gutter);
-    width: 360px;
+    width: 380px;
     max-height: calc(100% - 2 * var(--gutter));
     overflow-y: auto;
     border-radius: 24px;
@@ -107,9 +110,10 @@ body {
     border-radius: 999px; background: var(--chip); border: 1px solid var(--chip-line);
 }
 .segmented button {
-    flex: 1 1 0; min-width: 0;
+    /* As wide as their names need, sharing what is left: "Cycling" beside "MTB". */
+    flex: 1 1 auto; min-width: 0;
     font: inherit; font-size: 15px; font-weight: 500; color: var(--text-2);
-    padding: 7px 10px; border: 0; border-radius: 999px; background: transparent; cursor: pointer;
+    padding: 7px 8px; border: 0; border-radius: 999px; background: transparent; cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .segmented button:hover { color: var(--ink); }
@@ -117,6 +121,117 @@ body {
     color: var(--ink); background: var(--selected); box-shadow: 0 1px 4px var(--selected-shadow);
 }
 .segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- Stops ---------- */
+.stops { display: grid; gap: 6px; }
+.stop-list { list-style: none; display: grid; gap: 6px; }
+.stop-row { display: flex; align-items: flex-start; gap: 8px; border-radius: 14px; }
+/* Level with the input, which stays at the top while its results open below it. */
+.stop-row > .stop-icon { margin-top: 10px; }
+.stop-row > .icon-button, .stop-row > .drag-handle { margin-top: 6px; }
+.stop-row.drop-target { box-shadow: 0 -2px 0 var(--accent); }
+.stop-icon {
+    flex: none; width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 12px; font-weight: 600;
+    color: var(--ink); background: var(--chip); border: 2px solid var(--muted);
+}
+.stop-icon.start { border-color: var(--ink); background: var(--selected); }
+.stop-icon.end { border-color: var(--route); background: var(--route); }
+
+.stop-field { position: relative; flex: 1; min-width: 0; }
+.stop-field input {
+    width: 100%; font: inherit; font-size: 16px; color: var(--ink);
+    padding: 9px 12px; border-radius: 12px; border: 1px solid var(--chip-line); background: var(--field);
+}
+.stop-field input::placeholder { color: var(--muted); }
+.stop-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.stop-field input::-webkit-search-cancel-button { display: none; }
+
+/* Results open inside the card, under their field, as lists do in the app's card. */
+.results {
+    margin-top: 6px; border-radius: 14px; padding: 4px;
+    background: var(--field); border: 1px solid var(--chip-line);
+    -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none;
+}
+.results ul { list-style: none; }
+.results li { display: grid; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.results li.highlighted { background: var(--chip); }
+.result-name { font-weight: 500; }
+.result-subtitle { font-size: 13px; color: var(--muted); }
+.results-message { padding: 8px 10px; font-size: 14px; color: var(--muted); }
+
+.icon-button, .drag-handle {
+    flex: none; width: 30px; height: 30px; display: grid; place-items: center;
+    font: inherit; font-size: 15px; color: var(--muted); background: transparent; border: 0; border-radius: 50%;
+}
+.icon-button { cursor: pointer; }
+.icon-button:hover:not(:disabled) { color: var(--ink); background: var(--chip); }
+.icon-button:disabled { opacity: 0.4; cursor: default; }
+.drag-handle { cursor: grab; font-size: 18px; }
+.icon-button:focus-visible, .text-button:focus-visible, .primary-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.stop-actions { display: flex; align-items: center; justify-content: space-between; padding-left: 2px; }
+.text-button {
+    display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 16px; font-weight: 500;
+    color: var(--kicker); background: transparent; border: 0; padding: 6px 0; cursor: pointer;
+}
+.add-icon {
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+    color: #FFFFFF; background: var(--red-ui); font-weight: 600;
+}
+
+/* ---------- The route ---------- */
+.route-section { gap: 10px; }
+.summary-numbers { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; transition: opacity 0.2s; }
+.summary-numbers.stale { opacity: 0.5; }
+.summary-distance { font-size: 28px; font-weight: 600; }
+.summary-detail { font-size: 16px; color: var(--text-2); }
+.summary-status, .summary-message { font-size: 15px; color: var(--muted); text-wrap: pretty; }
+
+.elevation { display: grid; gap: 4px; }
+.elevation svg { width: 100%; height: 72px; display: block; touch-action: none; cursor: crosshair; }
+.elevation-area { fill: var(--route); opacity: 0.16; }
+.elevation-line { fill: none; stroke: var(--route); stroke-width: 2; }
+.elevation-cursor { stroke: var(--ink); stroke-width: 1; opacity: 0.6; }
+.elevation-caption { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.primary-button {
+    justify-self: start; font: inherit; font-size: 16px; font-weight: 600; color: #FFFFFF;
+    background: var(--red-ui); border: 0; border-radius: 999px; padding: 10px 20px; cursor: pointer;
+}
+.primary-button:hover { opacity: 0.92; }
+
+/* ---------- Map settings ---------- */
+.map-settings { margin-top: 18px; border-top: 1px solid var(--chip-line); padding-top: 12px; }
+.map-settings summary {
+    cursor: pointer; font-size: 15px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em; list-style-position: inside;
+}
+.map-settings[open] { display: grid; gap: 14px; }
+.map-settings[open] summary { margin-bottom: 2px; }
+
+/* ---------- On the map ---------- */
+.stop-marker { cursor: grab; }
+.stop-marker-shape {
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+    font: 600 12px 'Fredoka', sans-serif; color: #13230C; background: #FFFFFF;
+    border: 3px solid #13230C; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+/* A pin whose point is the place: a rounded square standing on its corner. */
+.stop-marker-end {
+    width: 26px; height: 26px; margin-bottom: 4px; border: 3px solid #FFFFFF; background: var(--route);
+    border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+}
+
+.context-menu {
+    position: fixed; z-index: 10; display: grid; min-width: 180px; padding: 6px; border-radius: 14px;
+    transform: translate(4px, 4px);
+}
+.context-menu button {
+    font: inherit; font-size: 15px; text-align: left; color: var(--ink);
+    background: transparent; border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer;
+}
+.context-menu button:hover, .context-menu button:focus-visible { background: var(--chip); outline: none; }
 
 /* ---------- MapLibre's controls, in the card's glass ---------- */
 .maplibregl-ctrl-group {
