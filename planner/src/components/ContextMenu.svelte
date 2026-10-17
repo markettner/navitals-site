@@ -1,14 +1,12 @@
 <script lang="ts">
-  // What a right-click on the map offers: the point as the start, a stop, or the destination.
+  // A right-click menu over the map: for a point (Start here, …) or for a stop or bend (Remove, …).
   interface Props {
     x: number;
     y: number;
-    /** A stop needs a start and a destination to go between. */
-    canAddStop: boolean;
-    onchoose: (role: 'start' | 'stop' | 'end') => void;
+    items: { label: string; destructive?: boolean; action: () => void }[];
     onclose: () => void;
   }
-  let { x, y, canAddStop, onchoose, onclose }: Props = $props();
+  let { x, y, items, onclose }: Props = $props();
 
   let menu: HTMLElement;
 
@@ -23,12 +21,15 @@
       window.removeEventListener('keydown', key);
     };
   });
+
+  // Kept inside the window: a click near the right or bottom edge opens the menu the other way.
+  const left = $derived(Math.min(x, window.innerWidth - 200));
+  const top = $derived(Math.min(y, window.innerHeight - 16 - items.length * 40));
 </script>
 
-<div class="context-menu glass" role="menu" bind:this={menu} style:left={`${x}px`} style:top={`${y}px`}>
-  <button type="button" role="menuitem" onclick={() => onchoose('start')}>Start here</button>
-  {#if canAddStop}
-    <button type="button" role="menuitem" onclick={() => onchoose('stop')}>Add a stop here</button>
-  {/if}
-  <button type="button" role="menuitem" onclick={() => onchoose('end')}>End here</button>
+<div class="context-menu glass" role="menu" bind:this={menu} style:left={`${left}px`} style:top={`${top}px`}>
+  {#each items as item (item.label)}
+    <button type="button" role="menuitem" class:destructive={item.destructive}
+            onclick={() => { item.action(); onclose(); }}>{item.label}</button>
+  {/each}
 </div>

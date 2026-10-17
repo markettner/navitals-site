@@ -92,3 +92,97 @@ export function distanceToLine(line: Coordinate[], point: Coordinate): number {
   }
   return best;
 }
+
+/** Where a point falls on a line: the segment, how far along it (0...1), and how far off the line
+ *  the point is, in metres (`RouteGeometry.project`). Null for an empty line. */
+export function project(line: Coordinate[], point: Coordinate): { segment: number; t: number; distance: number; at: Coordinate } | null {
+  if (line.length === 0) return null;
+  if (line.length === 1) return { segment: 0, t: 0, distance: distance(line[0], point), at: line[0] };
+  let best: { segment: number; t: number; at: Coordinate; squared: number } | null = null;
+  const metresPerDegreeLon = 111_320 * Math.cos((point.latitude * Math.PI) / 180);
+  const metresPerDegreeLat = 110_540;
+  const toPlane = (c: Coordinate) => ({
+    x: (c.longitude - point.longitude) * metresPerDegreeLon, y: (c.latitude - point.latitude) * metresPerDegreeLat,
+  });
+  for (let i = 0; i + 1 < line.length; i++) {
+    const a = toPlane(line[i]), b = toPlane(line[i + 1]);
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, -(a.x * dx + a.y * dy) / lengthSquared));
+    const x = a.x + t * dx, y = a.y + t * dy;
+    const squared = x * x + y * y;
+    if (!best || squared < best.squared) {
+      best = { segment: i, t, squared, at: { latitude: point.latitude + y / metresPerDegreeLat, longitude: point.longitude + x / metresPerDegreeLon } };
+    }
+  }
+  return { segment: best!.segment, t: best!.t, at: best!.at, distance: distance(best!.at, point) };
+}
+
+/** The point at a fractional segment index along a line: 3.25 is a quarter of the way from the
+ *  fourth point to the fifth. */
+function pointAt(line: Coordinate[], position: number): Coordinate {
+  const index = Math.min(Math.max(0, Math.floor(position)), line.length - 1);
+  const t = position - index;
+  if (t <= 0 || index + 1 >= line.length) return line[index];
+  const a = line[index], b = line[index + 1];
+  return { latitude: a.latitude + (b.latitude - a.latitude) * t, longitude: a.longitude + (b.longitude - a.longitude) * t };
+}
+
+/** The line up to `position`, ending exactly there (`RouteGeometry.prefix`). */
+export function prefix(line: Coordinate[], position: number): Coordinate[] {
+  if (line.length === 0) return [];
+  const index = Math.min(Math.max(0, Math.floor(position)), line.length - 1);
+  const head = line.slice(0, index + 1);
+  if (position - index > 0 && index + 1 < line.length) head.push(pointAt(line, position));
+  return head;
+}
+
+/** The line from `position` on, starting exactly there (`RouteGeometry.suffix`). */
+export function suffix(line: Coordinate[], position: number): Coordinate[] {
+  if (line.length === 0) return [];
+  const index = Math.min(Math.max(0, Math.floor(position)), line.length - 1);
+  if (!(position - index > 0) || index + 1 >= line.length) return line.slice(index);
+  return [pointAt(line, position), ...line.slice(index + 1)];
+}
+
+/** Where each stop of a route sits along its line, as fractional segment indices, in the stops'
+ *  order (`RouteGeometry.stopPositions`). Each is looked for only after the one before it, so a
+ *  loop or an out-and-back doesn't pin a stop on the way home to the way out. The first is the
+ *  line's start and the last its end, by definition. */
+export function stopPositions(stops: Coordinate[], line: Coordinate[]): number[] {
+  if (line.length < 2 || stops.length < 2) return stops.map(() => 0);
+  const positions = [0];
+  for (const stop of stops.slice(1, -1)) {
+    const previous = positions.at(-1)!;
+    const from = Math.floor(previous);
+    const projection = project(line.slice(from), stop);
+    positions.push(projection ? Math.max(previous, from + projection.segment + projection.t) : previous);
+  }
+  positions.push(line.length - 1);
+  return positions;
+}
+
+/** The index in the stops a new point at `position` goes in at: after every stop the route has
+ *  passed there, never before the start or after the end (`RouteGeometry.insertionIndex`). */
+export function insertionIndex(position: number, positions: number[]): number {
+  if (positions.length < 2) return positions.length;
+  const passed = positions.filter((p) => p <= position).length;
+  return Math.min(Math.max(passed, 1), positions.length - 1);
+}
+
+/** Metres climbed, counting a rise only once it is `threshold` above the last turning point, so
+ *  the noise in a recording or a terrain model on a flat road doesn't add up to hills. */
+export function climbing(elevations: number[], threshold = 5): number {
+  if (elevations.length < 2) return 0;
+  let total = 0;
+  let reference = elevations[0];
+  for (const elevation of elevations) {
+    if (elevation - reference >= threshold) {
+      total += elevation - reference;
+      reference = elevation;
+    } else if (reference - elevation >= threshold) {
+      reference = elevation;
+    }
+  }
+  return total;
+}

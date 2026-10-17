@@ -27,7 +27,8 @@
     <div class="summary-numbers" class:stale={route.status === 'planning'}>
       <span class="summary-distance">{kilometres(track.length)}</span>
       <span class="summary-detail">
-        {duration(track.duration)} · ↗ {whole.format(track.ascent)} m
+        <!-- A line from a file has no time of its own: BRouter's is for routes it planned. -->
+        {track.duration ? `${duration(track.duration)} · ` : ''}↗ {whole.format(track.ascent)} m
       </span>
     </div>
     {#if route.status === 'planning'}<p class="summary-status">Planning…</p>{/if}

@@ -91,7 +91,9 @@ body {
     padding: 14px 16px 18px;
 }
 
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card-head { display: flex; align-items: center; gap: 12px; }
+.card-head .kicker { flex: 1; }
+.history { display: flex; gap: 2px; }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: 20px; }
 .brand img { width: 36px; height: 36px; border-radius: 9px; box-shadow: 0 3px 10px rgba(20, 52, 0, 0.25); }
 .kicker { color: var(--kicker); font-weight: 600; font-size: 14px; letter-spacing: 0.02em; }
@@ -137,6 +139,18 @@ body {
 }
 .stop-icon.start { border-color: var(--ink); background: var(--selected); }
 .stop-icon.end { border-color: var(--route); background: var(--route); }
+.stop-icon.shaping { width: 12px; height: 12px; margin: 13px 5px 0; border-width: 2px; border-color: var(--route); background: var(--selected); }
+.stop-icon.place { width: 12px; height: 12px; margin: 0 5px; border-width: 2px; }
+
+/* A bend a drag left: listed by the street it was dragged onto, in grey, with no field. */
+.shaping-row { min-height: 36px; }
+.shaping-name { flex: 1; min-width: 0; padding: 8px 0 0 2px; color: var(--muted); font-size: 15px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.line-route { display: grid; gap: 10px; }
+.line-row { align-items: center; min-height: 32px; font-size: 16px; }
+.line-row > .stop-icon { margin-top: 0; }
+.place-row { color: var(--text-2); font-size: 15px; }
 
 .stop-field { position: relative; flex: 1; min-width: 0; }
 .stop-field input {
@@ -200,6 +214,13 @@ body {
     background: var(--red-ui); border: 0; border-radius: 999px; padding: 10px 20px; cursor: pointer;
 }
 .primary-button:hover { opacity: 0.92; }
+.file-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+.drop-hint {
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; pointer-events: none;
+    background: rgba(224, 43, 38, 0.08); outline: 3px dashed var(--route); outline-offset: -12px;
+}
+.drop-hint span { padding: 14px 22px; border-radius: 18px; font-size: 18px; font-weight: 600; }
 
 /* ---------- Map settings ---------- */
 .map-settings { margin-top: 18px; border-top: 1px solid var(--chip-line); padding-top: 12px; }
@@ -217,6 +238,8 @@ body {
     font: 600 12px 'Fredoka', sans-serif; color: #13230C; background: #FFFFFF;
     border: 3px solid #13230C; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
+/* A bend: small, so it doesn't read as somewhere the route goes to. */
+.stop-marker-shaping { width: 14px; height: 14px; border: 3px solid var(--route); }
 /* A pin whose point is the place: a rounded square standing on its corner. */
 .stop-marker-end {
     width: 26px; height: 26px; margin-bottom: 4px; border: 3px solid #FFFFFF; background: var(--route);
@@ -232,6 +255,7 @@ body {
     background: transparent; border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer;
 }
 .context-menu button:hover, .context-menu button:focus-visible { background: var(--chip); outline: none; }
+.context-menu button.destructive { color: var(--kicker); }
 
 /* ---------- MapLibre's controls, in the card's glass ---------- */
 .maplibregl-ctrl-group {
