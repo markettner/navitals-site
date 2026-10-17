@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Planner - Navitals</title>
+    <meta name="description"
+        content="Plan a bike or hiking route on the Navitals map, with the app's BRouter profiles, and take it to your iPhone as GPX.">
+    <meta name="theme-color" content="#93CC3E" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0E1A10" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" data-icon>
+    <script type="module" src="/src/main.ts"></script>
+</head>
+
+<body>
+    <div id="map" aria-label="Map"></div>
+
+    <aside class="card glass" aria-label="Route planner">
+        <header class="card-head">
+            <a class="brand" href="../">
+                <img data-icon alt="" width="36" height="36">
+                <span>Navitals</span>
+            </a>
+            <span class="kicker">Route Planner</span>
+        </header>
+
+        <section class="card-section" aria-labelledby="map-heading">
+            <h2 id="map-heading">Map</h2>
+
+            <div class="field">
+                <span class="field-label" id="appearance-label">Appearance</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="appearance-label" data-choice="appearance"></div>
+            </div>
+
+            <div class="field">
+                <span class="field-label" id="light-label">Light map</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="light-label" data-choice="light"></div>
+                <p class="note" data-note="light"></p>
+            </div>
+
+            <div class="field">
+                <span class="field-label" id="dark-label">Dark map</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="dark-label" data-choice="dark"></div>
+                <p class="note" data-note="dark"></p>
+            </div>
+        </section>
+    </aside>
+</body>
+
+</html>

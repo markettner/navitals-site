@@ -1,0 +1,144 @@
+/* Navitals route planner. The tokens are the site's (../styles.css); the layout follows the app on
+   iPad and Mac: a floating card at the leading edge over a full-window map, and a sheet at the
+   bottom on a phone. */
+
+@font-face {
+    font-family: 'Fredoka';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('../../fonts/fredoka-latin-ext.woff') format('woff');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: 'Fredoka';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('../../fonts/fredoka-latin.woff') format('woff');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+    --ground: #93CC3E;
+    --red-ui: #E02B26;
+    --accent: #E02B26;
+    --kicker: #C4221C;
+    --ink: #13230C;
+    --text-2: #33422A;
+    --muted: #4A5A40;
+    --glass: rgba(255, 255, 255, 0.76);
+    --glass-line: rgba(255, 255, 255, 0.75);
+    --glass-shadow: rgba(18, 48, 0, 0.2);
+    --chip: rgba(19, 35, 12, 0.06);
+    --chip-line: rgba(19, 35, 12, 0.1);
+    --selected: #FFFFFF;
+    --selected-shadow: rgba(19, 35, 12, 0.18);
+    --gutter: 16px;
+    color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ground: #0E1A10;
+        --accent: #FF4A40;
+        --kicker: #FF7A72;
+        --ink: #F4F8F1;
+        --text-2: #C3CEBC;
+        --muted: #9FB096;
+        --glass: rgba(12, 20, 13, 0.64);
+        --glass-line: rgba(255, 255, 255, 0.1);
+        --glass-shadow: rgba(0, 0, 0, 0.45);
+        --chip: rgba(255, 255, 255, 0.07);
+        --chip-line: rgba(255, 255, 255, 0.1);
+        --selected: rgba(255, 255, 255, 0.18);
+        --selected-shadow: rgba(0, 0, 0, 0.3);
+    }
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+    font-family: 'Fredoka', -apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'Segoe UI', sans-serif;
+    color: var(--ink);
+    background: var(--ground);
+    -webkit-font-smoothing: antialiased;
+}
+
+#map { position: fixed; inset: 0; }
+
+.glass {
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    backdrop-filter: blur(22px) saturate(1.5);
+    border: 1px solid var(--glass-line);
+    box-shadow: 0 18px 48px var(--glass-shadow);
+}
+
+/* ---------- The card ---------- */
+.card {
+    position: fixed;
+    top: var(--gutter);
+    left: var(--gutter);
+    width: 360px;
+    max-height: calc(100% - 2 * var(--gutter));
+    overflow-y: auto;
+    border-radius: 24px;
+    padding: 14px 16px 18px;
+}
+
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: 20px; }
+.brand img { width: 36px; height: 36px; border-radius: 9px; box-shadow: 0 3px 10px rgba(20, 52, 0, 0.25); }
+.kicker { color: var(--kicker); font-weight: 600; font-size: 14px; letter-spacing: 0.02em; }
+
+.card-section { margin-top: 18px; display: grid; gap: 14px; }
+.card-section h2 { font-size: 15px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.field { display: grid; gap: 6px; }
+.field-label { font-size: 15px; font-weight: 500; color: var(--text-2); }
+.note { font-size: 13px; line-height: 1.35; color: var(--muted); text-wrap: pretty; }
+.note:empty { display: none; }
+
+/* A row of pills, one of them chosen. */
+.segmented {
+    display: flex; gap: 2px; padding: 3px;
+    border-radius: 999px; background: var(--chip); border: 1px solid var(--chip-line);
+}
+.segmented button {
+    flex: 1 1 0; min-width: 0;
+    font: inherit; font-size: 15px; font-weight: 500; color: var(--text-2);
+    padding: 7px 10px; border: 0; border-radius: 999px; background: transparent; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.segmented button:hover { color: var(--ink); }
+.segmented button[aria-checked="true"] {
+    color: var(--ink); background: var(--selected); box-shadow: 0 1px 4px var(--selected-shadow);
+}
+.segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- MapLibre's controls, in the card's glass ---------- */
+.maplibregl-ctrl-group {
+    background: var(--glass) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    backdrop-filter: blur(22px) saturate(1.5);
+    border-radius: 14px !important;
+    box-shadow: 0 6px 20px var(--glass-shadow) !important;
+}
+@media (prefers-color-scheme: dark) {
+    .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
+    .maplibregl-ctrl-group button + button { border-top-color: rgba(255, 255, 255, 0.12); }
+}
+.maplibregl-ctrl-top-right { top: var(--gutter); right: var(--gutter); }
+.maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 0 0 10px 0; }
+
+/* ---------- Phones: the card becomes a sheet at the bottom ---------- */
+@media (max-width: 640px) {
+    .card {
+        top: auto; left: var(--gutter); right: var(--gutter); bottom: var(--gutter);
+        width: auto; max-height: 45%;
+    }
+    /* Above the sheet, whatever its height (main.ts measures it). */
+    .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-height, 0px) + var(--gutter)); }
+}
