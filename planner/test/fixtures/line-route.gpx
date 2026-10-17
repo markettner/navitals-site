@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Navitals" xmlns="http://www.topografix.com/GPX/1/1"
+     xmlns:trp="http://www.garmin.com/xmlschemas/TripExtensions/v1"
+     xmlns:navitals="https://navitals.kettner.berlin/xmlschemas/gpx/1">
+  <metadata>
+    <name>Müggelsee shore</name>
+    <extensions><navitals:profile>trekking</navitals:profile></extensions>
+  </metadata>
+  <wpt lat="52.4400000" lon="13.6300000"><name>Rahnsdorf</name></wpt>
+  <wpt lat="52.4400000" lon="13.6450000"><name>Strandbad</name></wpt>
+  <wpt lat="52.4346000" lon="13.6570000"><name>Müggelhort</name></wpt>
+  <trk>
+    <name>Müggelsee shore</name>
+    <type>cycling</type>
+    <trkseg>
+      <trkpt lat="52.4400000" lon="13.6300000"/>
+      <trkpt lat="52.4400000" lon="13.6375000"/>
+      <trkpt lat="52.4400000" lon="13.6450000"/>
+      <trkpt lat="52.4373000" lon="13.6450000"/>
+      <trkpt lat="52.4346000" lon="13.6450000"/>
+      <trkpt lat="52.4346000" lon="13.6570000"/>
+    </trkseg>
+  </trk>
+</gpx>

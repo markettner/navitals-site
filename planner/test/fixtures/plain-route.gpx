@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A plan with nothing to say which points are stops, as brouter-web and Kurviger write one: a
+     few named route points far apart and no track. Every point is a stop. -->
+<gpx version="1.1" creator="brouter-web" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Mitte to Köpenick</name>
+    <rtept lat="52.5200000" lon="13.4050000"><name>Mitte</name></rtept>
+    <rtept lat="52.4880000" lon="13.4720000"><name>Treptower Park</name></rtept>
+    <rtept lat="52.4450000" lon="13.5750000"><name>Köpenick</name></rtept>
+  </rte>
+</gpx>

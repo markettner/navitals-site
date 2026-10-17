@@ -1,0 +1,112 @@
+// Routing on brouter.de with our own profiles (plan Phase 7j).
+//
+// Each profile is uploaded once per visit (`POST /brouter/profile`, which answers with a
+// `custom_<id>`) and routed with by that id. brouter.de forgets custom profiles after a while and
+// then answers a route for the id with an empty 500, so on a failure the profile is uploaded again
+// and the route asked once more. If an upload fails outright, brouter.de's own profile of the same
+// name is used: today our files are brouter.de's copies (checked 2026-10-17, all five identical).
+
+import { BRouterDecodeError, decode, profileFor, routeURL, type Track } from './brouter';
+import { nearSideWaypoints } from './nearSide';
+import type { Sport, Waypoint } from './route';
+
+export const brouterBase = 'https://brouter.de/brouter';
+
+export class RoutingError extends Error {}
+
+export interface BRouterClientOptions {
+  base?: string;
+  /** The text of a profile, by name. */
+  profileText: (profile: string) => Promise<string>;
+  fetch?: typeof fetch;
+}
+
+export class BRouterClient {
+  private readonly base: string;
+  private readonly profileText: (profile: string) => Promise<string>;
+  private readonly fetch: typeof fetch;
+  /** The id brouter.de gave each uploaded profile (or will: the upload may still be on its way). */
+  private readonly uploaded = new Map<string, Promise<string>>();
+
+  constructor(options: BRouterClientOptions) {
+    this.base = options.base ?? brouterBase;
+    this.profileText = options.profileText;
+    this.fetch = options.fetch ?? fetch.bind(globalThis);
+  }
+
+  /** BRouter's route through the waypoints for a sport. A shaping point dropped on the far side of
+   *  a divided road is moved to the near side and the route asked again, once, when the first
+   *  answer loops to reach it; the second answer is kept only if it is shorter. As the app does. */
+  async route(waypoints: Waypoint[], sport: Sport, options: { alternative?: number; signal?: AbortSignal } = {}): Promise<Track> {
+    const track = await this.answer(waypoints, sport, options);
+    const nearSide = nearSideWaypoints(waypoints, track.coordinates);
+    if (!nearSide) return track;
+    try {
+      const better = await this.answer(nearSide, sport, options);
+      return better.length < track.length ? better : track;
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
+      return track;
+    }
+  }
+
+  private async answer(waypoints: Waypoint[], sport: Sport,
+                       options: { alternative?: number; signal?: AbortSignal }): Promise<Track> {
+    const profile = profileFor(sport);
+    const id = await this.profileID(profile, options.signal);
+    let response = await this.get(waypoints, id, options);
+    let text = await response.text();
+    if (!response.ok && id !== profile && !text.trim()) {
+      // An empty refusal for our id: brouter.de has forgotten the profile. Upload it again and ask
+      // once more. A refusal with a reason ("position not mapped …") is about the route instead.
+      this.uploaded.delete(profile);
+      response = await this.get(waypoints, await this.profileID(profile, options.signal), options);
+      text = await response.text();
+    }
+    if (!response.ok) throw new RoutingError(text.trim() || `brouter.de answered ${response.status}.`);
+    try {
+      return decode(text);
+    } catch (error) {
+      // BRouter explains a refusal in plain text ("position not mapped in existing datafile").
+      if (error instanceof BRouterDecodeError) throw new RoutingError(text.trim() || error.message);
+      throw error;
+    }
+  }
+
+  private get(waypoints: Waypoint[], profile: string,
+              options: { alternative?: number; signal?: AbortSignal }): Promise<Response> {
+    return this.fetch(routeURL(this.base, waypoints, profile, options.alternative ?? 0), { signal: options.signal });
+  }
+
+  /** Our profile's id on brouter.de, uploading it if this visit hasn't yet. */
+  private profileID(profile: string, signal?: AbortSignal): Promise<string> {
+    let id = this.uploaded.get(profile);
+    if (!id) {
+      id = this.upload(profile);
+      this.uploaded.set(profile, id);
+      // A failed upload is not remembered, so the next route tries again.
+      id.then((value) => { if (value === profile) this.uploaded.delete(profile); });
+    }
+    // The upload belongs to every route that waits for it, so one route's abort doesn't cancel it.
+    if (!signal) return id;
+    return Promise.race([id, new Promise<never>((_, reject) => {
+      if (signal.aborted) reject(signal.reason);
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    })]);
+  }
+
+  private async upload(profile: string): Promise<string> {
+    try {
+      const response = await this.fetch(`${this.base}/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: await this.profileText(profile),
+      });
+      const answer = (await response.json()) as { profileid?: string; error?: string };
+      if (response.ok && answer.profileid) return answer.profileid;
+    } catch {
+      // Falls through to brouter.de's own profile.
+    }
+    return profile;
+  }
+}

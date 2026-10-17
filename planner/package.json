@@ -4,14 +4,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "build": "tsc --noEmit && vitest run && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "sync": "scripts/sync-from-app.sh"
   },
   "dependencies": {
     "maplibre-gl": "6.11.2"
   },
   "devDependencies": {
     "typescript": "7.0.2",
-    "vite": "8.3.1"
+    "vite": "8.3.1",
+    "vitest": "5.0.2"
   }
 }

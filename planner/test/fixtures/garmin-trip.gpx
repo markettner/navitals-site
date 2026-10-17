@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<!-- A trip modelled on Garmin's exports: the marks carry options of their own, the route
+     points carry Garmin's own route geometry (gpxx:rpt), and the namespace has another prefix
+     than ours. Coordinates are Potsdam, invented. -->
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="Garmin Desktop App" version="1.1"
+     xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3"
+     xmlns:tripx="http://www.garmin.com/xmlschemas/TripExtensions/v1">
+  <metadata>
+    <link href="http://www.garmin.com"><text>Garmin International</text></link>
+    <time>2026-10-17T08:00:00Z</time>
+  </metadata>
+  <rte>
+    <name>Potsdam Loop</name>
+    <extensions>
+      <tripx:Trip><tripx:TransportationMode>Motorcycling</tripx:TransportationMode></tripx:Trip>
+    </extensions>
+    <rtept lat="52.3911000" lon="13.0656000">
+      <time>2026-10-17T08:00:00Z</time>
+      <name>Potsdam Hbf</name>
+      <extensions>
+        <tripx:ViaPoint>
+          <tripx:DepartureTime>2026-10-17T08:00:00Z</tripx:DepartureTime>
+          <tripx:CalculationMode>ShorterDistance</tripx:CalculationMode>
+          <tripx:ElevationMode>Standard</tripx:ElevationMode>
+        </tripx:ViaPoint>
+        <gpxx:RoutePointExtension>
+          <gpxx:rpt lat="52.3920000" lon="13.0600000"/>
+          <gpxx:rpt lat="52.3950000" lon="13.0500000"/>
+        </gpxx:RoutePointExtension>
+      </extensions>
+    </rtept>
+    <rtept lat="52.4040000" lon="13.0380000">
+      <name>Sanssouci</name>
+      <extensions>
+        <tripx:ShapingPoint/>
+        <gpxx:RoutePointExtension><gpxx:rpt lat="52.4045000" lon="13.0300000"/></gpxx:RoutePointExtension>
+      </extensions>
+    </rtept>
+    <rtept lat="52.4200000" lon="13.0500000">
+      <name>Neuer Garten</name>
+      <extensions>
+        <tripx:ViaPoint><tripx:StopDuration>PT15M</tripx:StopDuration></tripx:ViaPoint>
+      </extensions>
+    </rtept>
+    <rtept lat="52.3911000" lon="13.0656000">
+      <name>Potsdam Hbf</name>
+      <extensions><tripx:ViaPoint/></extensions>
+    </rtept>
+  </rte>
+  <trk>
+    <name>Potsdam Loop</name>
+    <trkseg>
+      <trkpt lat="52.3911000" lon="13.0656000"/>
+      <trkpt lat="52.3950000" lon="13.0500000"/>
+      <trkpt lat="52.4040000" lon="13.0380000"/>
+      <trkpt lat="52.4200000" lon="13.0500000"/>
+      <trkpt lat="52.4050000" lon="13.0650000"/>
+      <trkpt lat="52.3911000" lon="13.0656000"/>
+    </trkseg>
+  </trk>
+</gpx>

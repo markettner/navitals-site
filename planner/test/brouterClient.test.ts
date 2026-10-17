@@ -1,0 +1,141 @@
+// The brouter.de client against a stand-in server: uploads, a forgotten profile, refusals, and the
+// app's second request for a shaping point on the far side of the road.
+
+import { describe, expect, test } from 'vitest';
+import fixtureText from './fixtures/brouter-far-side-via.json?raw';
+import { BRouterClient, RoutingError } from '../src/core/brouterClient';
+import type { Waypoint } from '../src/core/route';
+
+type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>;
+
+/** A fetch that records every request and answers through `handler`. */
+function server(handler: Handler) {
+  const requests: { url: URL; method: string }[] = [];
+  const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    requests.push({ url, method: init?.method ?? 'GET' });
+    return handler(url, init);
+  }) as typeof globalThis.fetch;
+  return { fetch, requests, routes: () => requests.filter((r) => r.method === 'GET') };
+}
+
+const geojson = (line: number[][], length: number) => JSON.stringify({
+  type: 'FeatureCollection',
+  features: [{ type: 'Feature', properties: { 'track-length': String(length), 'total-time': '600', 'filtered ascend': '4' },
+    geometry: { type: 'LineString', coordinates: line } }],
+});
+const straight = geojson([[13.40, 52.52, 34], [13.42, 52.51, 35]], 1800);
+const uploaded = (id: string) => new Response(JSON.stringify({ profileid: id }), { headers: { 'Content-Type': 'application/json' } });
+const points: Waypoint[] = [
+  { latitude: 52.52, longitude: 13.40, kind: 'stop' },
+  { latitude: 52.51, longitude: 13.42, kind: 'stop' },
+];
+const profileText = async (profile: string) => `# ${profile}.brf`;
+
+describe('the brouter.de client', () => {
+  test('a profile is uploaded once and routed with by its id', async () => {
+    let uploads = 0;
+    const brouter = server((url, init) => {
+      if (url.pathname.endsWith('/profile')) {
+        expect(init?.body).toBe('# gravel.brf');
+        return uploaded(`custom_${++uploads}`);
+      }
+      return new Response(straight);
+    });
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch });
+    const [first, second] = await Promise.all([client.route(points, 'gravel'), client.route(points, 'gravel')]);
+    expect(first.length).toBe(1800);
+    expect(second.ascent).toBe(4);
+    expect(uploads).toBe(1);
+    expect(brouter.routes().map((r) => r.url.searchParams.get('profile'))).toEqual(['custom_1', 'custom_1']);
+    expect(brouter.routes()[0].url.searchParams.get('profile:pass2coefficient')).toBe('1');
+  });
+
+  test('a forgotten profile is uploaded again and the route asked once more', async () => {
+    let uploads = 0;
+    const brouter = server((url) => {
+      if (url.pathname.endsWith('/profile')) return uploaded(`custom_${++uploads}`);
+      // brouter.de answers a profile it no longer has with an empty 500.
+      return url.searchParams.get('profile') === 'custom_1' && uploads === 2
+        ? new Response('', { status: 500 })
+        : new Response(straight);
+    });
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch });
+    await client.route(points, 'cycling');
+    uploads = 2; // the server forgets custom_1
+    const track = await client.route(points, 'cycling');
+    expect(track.length).toBe(1800);
+    expect(brouter.routes().map((r) => r.url.searchParams.get('profile'))).toEqual(['custom_1', 'custom_1', 'custom_3']);
+  });
+
+  test("a refusal with a reason is the route's problem, not the profile's: no upload, the reason shown", async () => {
+    let uploads = 0;
+    const brouter = server((url) => {
+      if (url.pathname.endsWith('/profile')) return uploaded(`custom_${++uploads}`);
+      return new Response('from-position not mapped in existing datafile\n', { status: 400 });
+    });
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch });
+    await expect(client.route(points, 'road')).rejects.toThrow(new RoutingError('from-position not mapped in existing datafile'));
+    expect(uploads).toBe(1);
+  });
+
+  test("when the upload fails, brouter.de's own profile of that name routes, and the next route tries the upload again", async () => {
+    let uploadsTried = 0;
+    const brouter = server((url) => {
+      if (url.pathname.endsWith('/profile')) {
+        uploadsTried++;
+        return new Response('busy', { status: 503 });
+      }
+      return new Response(straight);
+    });
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch });
+    await client.route(points, 'hiking');
+    await client.route(points, 'hiking');
+    expect(brouter.routes().map((r) => r.url.searchParams.get('profile'))).toEqual(['hiking-mountain', 'hiking-mountain']);
+    expect(uploadsTried).toBe(2);
+  });
+
+  test('a shaping point on the far side of the road is asked again from the near side, and the shorter kept', async () => {
+    const fixture = JSON.parse(fixtureText) as { farVia: number[]; farLine: number[][]; nearLine: number[][] };
+    const far = fixture.farLine, near = fixture.nearLine;
+    const via: Waypoint[] = [
+      { latitude: far[0][1], longitude: far[0][0], kind: 'stop' },
+      { latitude: fixture.farVia[1], longitude: fixture.farVia[0], kind: 'shaping' },
+      { latitude: far.at(-1)![1], longitude: far.at(-1)![0], kind: 'stop' },
+    ];
+    const brouter = server((url) => {
+      if (url.pathname.endsWith('/profile')) return uploaded('custom_1');
+      // The first request has the point where it was dropped; the second, moved, gets the near line.
+      const middle = url.searchParams.get('lonlats')!.split('|')[1];
+      const asDropped = middle === `${fixture.farVia[0].toFixed(6)},${fixture.farVia[1].toFixed(6)}`;
+      return new Response(asDropped ? geojson(far, 900) : geojson(near, 400));
+    });
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch });
+    const track = await client.route(via, 'cycling');
+    expect(brouter.routes()).toHaveLength(2);
+    expect(track.length).toBe(400);
+  });
+
+  test('an aborted route rejects, and the upload it was waiting for still serves the next one', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let uploads = 0;
+    const brouter = server(async (url) => {
+      if (url.pathname.endsWith('/profile')) {
+        uploads++;
+        await held;
+        return uploaded('custom_1');
+      }
+      return new Response(straight);
+    });
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch });
+    const controller = new AbortController();
+    const first = client.route(points, 'mountainBike', { signal: controller.signal });
+    controller.abort();
+    await expect(first).rejects.toBeDefined();
+    const second = client.route(points, 'mountainBike');
+    release();
+    expect((await second).length).toBe(1800);
+    expect(uploads).toBe(1);
+  });
+});
