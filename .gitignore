@@ -7,3 +7,6 @@ DESIGN_NOTES.md
 # Temporary app screenshots, unused while the pages show placeholders.
 # Remove this once the real screenshots land.
 screenshots/
+
+# The site as the Pages workflow assembles it, when built locally to look at.
+_site/

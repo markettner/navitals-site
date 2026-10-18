@@ -295,14 +295,14 @@ a.eyebrow-pill:hover { color: var(--kicker); background: rgba(251, 42, 42, 0.17)
 .footer-legal { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 20px; font-size: 14px; text-align: center; }
 
 @media (max-width: 600px) {
-    /* The four nav items don't fit one phone-width line. The CTA joins the brand, and the three
-       page links get the row below to themselves, in equal thirds. */
+    /* The five nav items don't fit one phone-width line. The CTA joins the brand, and the four
+       page links get the row below to themselves, in equal quarters. */
     .site-bar { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; padding: 8px; border-radius: 26px; }
     .brand { font-size: clamp(19px, 5.4vw, 23px); }
-    .site-nav { display: contents; font-size: clamp(14px, 4vw, 16px); }
+    .site-nav { display: contents; font-size: clamp(13px, 4vw, 16px); }
     .site-nav .nav-cta { grid-area: 1 / 2; margin-left: 0; padding: 12px clamp(14px, 4.5vw, 20px); white-space: nowrap; }
-    .nav-pages { grid-area: 2 / 1 / 3 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-    .nav-pages a { justify-self: center; padding: 10px clamp(8px, 3vw, 14px); white-space: nowrap; }
+    .nav-pages { grid-area: 2 / 1 / 3 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+    .nav-pages a { justify-self: center; padding: 10px clamp(4px, 2vw, 14px); white-space: nowrap; }
 
     .hero { padding-top: 28px; padding-bottom: 48px; gap: 40px; }
     .hero-card, .spot-card, .text-header { padding: 28px 22px; border-radius: 28px; }

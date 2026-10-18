@@ -258,6 +258,7 @@
   </div>
 
   <MapSettings {choice} onchange={changeMap} />
+  <p class="card-footer"><a href="../privacy_policy.html#web-planner">Privacy</a></p>
 </aside>
 
 {#if droppingFile}

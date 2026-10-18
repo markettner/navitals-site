@@ -242,6 +242,10 @@ body {
 .map-settings[open] { display: grid; gap: 14px; }
 .map-settings[open] summary { margin-bottom: 2px; }
 
+.card-footer { margin-top: 12px; font-size: 13px; }
+.card-footer a { color: var(--muted); }
+.card-footer a:hover { color: var(--ink); }
+
 /* ---------- On the map ---------- */
 .stop-marker { cursor: grab; }
 .stop-marker-shape {
