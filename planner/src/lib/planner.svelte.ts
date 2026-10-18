@@ -7,7 +7,7 @@ import type { Track } from '../core/brouter';
 import { climbing, distance, length, type Coordinate } from '../core/geodesy';
 import { isLoop, sportOf, stopsOf, thinned, type GPXTrack, type NamedPoint } from '../core/gpxReader';
 import { sports, type Sport, type Waypoint } from '../core/route';
-import { PlaceSearch, type Place } from '../core/search';
+import { PlaceSearch, SearchUnavailable, type Place } from '../core/search';
 import type { PlanState } from '../core/urlState';
 
 export interface Stop {
@@ -20,7 +20,8 @@ export interface Stop {
 export type RouteState =
   | { status: 'idle' }
   | { status: 'planning'; previous: Track | null }
-  | { status: 'ready'; track: Track; waypoints: Waypoint[] }
+  /** `track` is the chosen one of `tracks`: the best route and the alternatives found so far. */
+  | { status: 'ready'; track: Track; tracks: Track[]; selected: number; waypoints: Waypoint[] }
   | { status: 'failed'; message: string };
 
 /** A route that follows its line (an imported recording): the line is the route, its ends are its
@@ -48,6 +49,16 @@ export function droppedPin(point: Coordinate, kind: Stop['kind'] = 'stop'): Plac
 function named(point: NamedPoint): Place {
   return { id: `gpx:${point.latitude},${point.longitude}`, name: point.name, subtitle: '', latitude: point.latitude, longitude: point.longitude, kind: 'other' };
 }
+
+/** How many alternatives to ask for beyond the best route, as the app does (`RouteOptions`). */
+export const alternatives = 2;
+/** How long a plan has to rest before its alternatives are asked for. Each one costs brouter.de
+ *  every search before it again, so a plan being dragged about mustn't ask on every drop. */
+export const alternativesDelay = 1500;
+
+/** How far apart the names of many bends are looked up, so a whole line's worth doesn't land on
+ *  Photon at once: about a minute and a half for the most there can be. */
+export const namingSpacing = 1000;
 
 /** How many shaping points "Make editable" lays along a line at most. Enough to keep a recording's
  *  way through a town; BRouter routes each stretch between them on its own. */
@@ -92,6 +103,8 @@ export class Planner {
     },
   });
   private request: AbortController | null = null;
+  /** The bends still waiting for their names, one lookup a second. */
+  private naming: AbortController | null = null;
 
   get canUndo(): boolean { return this.past.length > 0; }
   get canRedo(): boolean { return this.future.length > 0; }
@@ -288,6 +301,7 @@ export class Planner {
 
   /** A plan from the address: the points, named again by search. */
   open(state: PlanState): void {
+    this.naming?.abort();
     this.record();
     this.line = null;
     this.sport = state.sport;
@@ -299,6 +313,7 @@ export class Planner {
   /** A GPX file, by docs/ROUTE_GPX.md: a plan is planned again through its points, for its sport
    *  when it names one; anything else is a line, kept exactly as it is. */
   import(track: GPXTrack): void {
+    this.naming?.abort();
     this.record();
     this.importMessage = '';
     const sport = sportOf(track);
@@ -342,15 +357,45 @@ export class Planner {
     this.record();
     const points = thinned(line.track.coordinates, mostShapingPoints, 10);
     const start = this.stops[0], finish = this.stops.at(-1)!;
-    this.stops = [start, ...points.slice(1, -1).map((point) => newStop(droppedPin(point, 'shaping'), 'shaping')), finish];
+    const bends = points.slice(1, -1).map((point) => newStop(droppedPin(point, 'shaping'), 'shaping'));
+    this.stops = [start, ...bends, finish];
     this.line = null;
     this.plan();
+    this.nameSlowly(bends.map((bend) => bend.id));
+  }
+
+  /** Names many bends one after another, `namingSpacing` apart, in the background. Bends removed
+   *  meanwhile are skipped; if Photon stops answering, the rest keep their placeholder. */
+  private nameSlowly(ids: number[]): void {
+    this.naming?.abort();
+    const naming = new AbortController();
+    this.naming = naming;
+    (async () => {
+      for (const id of ids) {
+        await new Promise((resolve) => setTimeout(resolve, namingSpacing));
+        if (naming.signal.aborted) return;
+        const place = this.stops.find((stop) => stop.id === id)?.place;
+        if (!place) continue;
+        try {
+          await this.nameNow(id, place);
+        } catch (error) {
+          if (error instanceof SearchUnavailable) return;
+        }
+      }
+    })();
   }
 
   private showLine(line: LineRoute): void {
     this.request?.abort();
     this.request = null;
-    this.route = { status: 'ready', track: line.track, waypoints: this.waypoints };
+    this.route = { status: 'ready', track: line.track, tracks: [line.track], selected: 0, waypoints: this.waypoints };
+  }
+
+  /** Shows one of the routes found: the best, or an alternative. */
+  chooseRoute(index: number): void {
+    const route = this.route;
+    if (route.status !== 'ready' || !route.tracks[index] || index === route.selected) return;
+    this.route = { ...route, track: route.tracks[index], selected: index };
   }
 
   // ---------- Routing ----------
@@ -371,7 +416,10 @@ export class Planner {
     this.route = { status: 'planning', previous };
     this.client.route(waypoints, this.sport, { signal: request.signal }).then(
       (track) => {
-        if (this.request === request) this.route = { status: 'ready', track, waypoints };
+        if (this.request !== request) return;
+        this.route = { status: 'ready', track, tracks: [track], selected: 0, waypoints };
+        // A route through shaping points is one the rider drew; there is nothing else to offer.
+        if (!waypoints.some((w) => w.kind === 'shaping')) this.findAlternatives(request, waypoints);
       },
       (error: unknown) => {
         if (this.request !== request || request.signal.aborted) return;
@@ -380,15 +428,39 @@ export class Planner {
     );
   }
 
+  /** The alternatives, once the plan has rested, one after another, best first. A failed one only
+   *  ends the search for more; one that repeats a route already found (BRouter's answer when it
+   *  has nothing different) is left out. A new plan cancels the lot. */
+  private findAlternatives(request: AbortController, waypoints: Waypoint[]): void {
+    const signal = request.signal;
+    const rested = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(resolve, alternativesDelay);
+      signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+    });
+    (async () => {
+      await rested;
+      for (let alternative = 1; alternative <= alternatives; alternative++) {
+        const track = await this.client.route(waypoints, this.sport, { alternative, signal });
+        const route = this.route;
+        if (this.request !== request || route.status !== 'ready') return;
+        if (route.tracks.some((known) => Math.abs(known.length - track.length) < 1 && known.coordinates.length === track.coordinates.length)) continue;
+        this.route = { ...route, tracks: [...route.tracks, track] };
+      }
+    })().catch(() => { /* the alternatives found stand */ });
+  }
+
   /** Names a point placed by coordinates after what search finds there: a stop by its address,
    *  a bend by its street. Only the name changes, so nothing is planned again. */
   private name(id: number, point: Coordinate): void {
-    this.search.name(point).then((place) => {
-      const stop = this.stops.find((s) => s.id === id);
-      // Only if the stop is still that point: it may have been moved or cleared meanwhile.
-      if (!place || !stop?.place || stop.place.latitude !== point.latitude || stop.place.longitude !== point.longitude) return;
-      stop.place = { ...place, latitude: point.latitude, longitude: point.longitude };
-    }, () => { /* the coordinates stay its name */ });
+    this.nameNow(id, point).catch(() => { /* the coordinates stay its name */ });
+  }
+
+  private async nameNow(id: number, point: Coordinate): Promise<void> {
+    const place = await this.search.name(point);
+    const stop = this.stops.find((s) => s.id === id);
+    // Only if the stop is still that point: it may have been moved or cleared meanwhile.
+    if (!place || !stop?.place || stop.place.latitude !== point.latitude || stop.place.longitude !== point.longitude) return;
+    stop.place = { ...place, latitude: point.latitude, longitude: point.longitude };
   }
 }
 

@@ -32,6 +32,7 @@
     --glass-shadow: rgba(18, 48, 0, 0.2);
     --chip: rgba(19, 35, 12, 0.06);
     --chip-line: rgba(19, 35, 12, 0.1);
+    --outline: rgba(19, 35, 12, 0.22);
     --selected: #FFFFFF;
     --selected-shadow: rgba(19, 35, 12, 0.18);
     --gutter: 16px;
@@ -52,6 +53,7 @@
         --glass-shadow: rgba(0, 0, 0, 0.45);
         --chip: rgba(255, 255, 255, 0.07);
         --chip-line: rgba(255, 255, 255, 0.1);
+        --outline: rgba(255, 255, 255, 0.22);
         --selected: rgba(255, 255, 255, 0.18);
         --selected-shadow: rgba(0, 0, 0, 0.3);
         --field: rgba(255, 255, 255, 0.08);
@@ -70,6 +72,8 @@ body {
 }
 
 #map { position: fixed; inset: 0; }
+/* A long press opens our menu, not the browser's text selection or image callout. */
+#map { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
 .glass {
     background: var(--glass);
@@ -146,6 +150,13 @@ body {
 .shaping-row { min-height: 36px; }
 .shaping-name { flex: 1; min-width: 0; padding: 8px 0 0 2px; color: var(--muted); font-size: 15px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.fold-button {
+    flex: 1; text-align: left; font: inherit; font-size: 15px; color: var(--muted);
+    background: transparent; border: 0; padding: 8px 0 0 2px; cursor: pointer;
+}
+.fold-button:hover { color: var(--ink); }
+.fold-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
 .line-route { display: grid; gap: 10px; }
 .line-row { align-items: center; min-height: 32px; font-size: 16px; }
@@ -257,6 +268,14 @@ body {
 .context-menu button:hover, .context-menu button:focus-visible { background: var(--chip); outline: none; }
 .context-menu button.destructive { color: var(--kicker); }
 
+/* A route's distance on the map, when there are several: white for the others, red for the
+   chosen one, as the app's callouts. */
+.route-label {
+    font: 600 14px 'Fredoka', sans-serif; color: var(--route); background: #FFFFFF;
+    border: 0; border-radius: 10px; padding: 4px 9px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); cursor: pointer;
+}
+.route-label.selected { color: #FFFFFF; background: var(--route); }
+
 /* ---------- MapLibre's controls, in the card's glass ---------- */
 .maplibregl-ctrl-group {
     background: var(--glass) !important;
@@ -272,8 +291,24 @@ body {
 .maplibregl-ctrl-top-right { top: var(--gutter); right: var(--gutter); }
 .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 0 0 10px 0; }
 
+.sheet-handle { display: none; }
+
 /* ---------- Phones: the card becomes a sheet at the bottom ---------- */
 @media (max-width: 640px) {
+    /* The handle: a bar, with room enough round it to hit with a thumb. */
+    .sheet-handle {
+        display: block; width: 100%; height: 22px; margin: -10px 0 4px; padding: 0;
+        background: transparent; border: 0; cursor: grab; touch-action: none;
+    }
+    .sheet-handle::before {
+        content: ''; display: block; width: 40px; height: 5px; margin: 8px auto 0;
+        border-radius: 3px; background: var(--outline);
+    }
+    .sheet-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+    /* Put away: the header and the route's numbers stay, the rest waits. */
+    .card.collapsed > :not(.sheet-handle, .card-head, .route-section),
+    .card.collapsed .route-section > :not(.summary) { display: none; }
+    .card.collapsed .route-section { margin-top: 10px; }
     .card {
         top: auto; left: var(--gutter); right: var(--gutter); bottom: var(--gutter);
         width: auto; max-height: 45%;

@@ -17,6 +17,43 @@
 
   const stopCount = $derived(planner.stops.filter((stop) => stop.kind === 'stop').length);
 
+  /** A run of more than this many bends in a row is listed as one row that opens: "Make
+   *  editable" lays up to 80 along a line, and eighty grey rows would bury the stops. */
+  const foldAfter = 3;
+  /** The runs opened, by their first bend. */
+  let opened = $state<Set<number>>(new Set());
+
+  type Row = { type: 'point'; index: number } | { type: 'fold'; index: number; count: number; open: boolean };
+  const rows = $derived.by(() => {
+    const result: Row[] = [];
+    const stops = planner.stops;
+    for (let index = 0; index < stops.length; index++) {
+      if (stops[index].kind !== 'shaping') {
+        result.push({ type: 'point', index });
+        continue;
+      }
+      let end = index;
+      while (end + 1 < stops.length && stops[end + 1].kind === 'shaping') end++;
+      const count = end - index + 1;
+      if (count > foldAfter) {
+        const open = opened.has(stops[index].id);
+        result.push({ type: 'fold', index, count, open });
+        if (open) for (let i = index; i <= end; i++) result.push({ type: 'point', index: i });
+      } else {
+        for (let i = index; i <= end; i++) result.push({ type: 'point', index: i });
+      }
+      index = end;
+    }
+    return result;
+  });
+
+  function toggle(id: number) {
+    const next = new Set(opened);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    opened = next;
+  }
+
   /** A stop's number between the ends, counting stops only. */
   function stopNumber(index: number): number {
     return planner.stops.slice(0, index + 1).filter((stop) => stop.kind === 'stop').length - 1;
@@ -37,8 +74,17 @@
 
 <div class="stops">
   <ol class="stop-list">
-    {#each planner.stops as stop, index (stop.id)}
-      {#if stop.kind === 'shaping'}
+    {#each rows as row (row.type === 'fold' ? `fold-${planner.stops[row.index].id}` : planner.stops[row.index].id)}
+      {@const index = row.index}
+      {@const stop = planner.stops[index]}
+      {#if row.type === 'fold'}
+        <li class="stop-row shaping-row">
+          <span class="stop-icon shaping" aria-hidden="true"></span>
+          <button type="button" class="fold-button" aria-expanded={row.open} onclick={() => toggle(stop.id)}>
+            {row.count} shaping points <span aria-hidden="true">{row.open ? '▴' : '▾'}</span>
+          </button>
+        </li>
+      {:else if stop.kind === 'shaping'}
         <li class="stop-row shaping-row">
           <span class="stop-icon shaping" aria-hidden="true"></span>
           <span class="shaping-name" title="A shaping point: the route bends through it">{stop.place?.name ?? 'Shaping point'}</span>

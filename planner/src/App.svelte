@@ -35,6 +35,21 @@
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let droppingFile = $state(false);
 
+  // On a phone the card is a sheet, and a sheet can be put away: down to its header and the
+  // route's numbers, so the map has the screen. A tap on the handle toggles it, a swipe sets it.
+  let collapsed = $state(false);
+  let swipeFrom: number | null = null;
+  function handleDown(event: PointerEvent) {
+    swipeFrom = event.clientY;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+  function handleUp(event: PointerEvent) {
+    if (swipeFrom === null) return;
+    const moved = event.clientY - swipeFrom;
+    swipeFrom = null;
+    collapsed = moved > 24 ? true : moved < -24 ? false : !collapsed;
+  }
+
   onMount(() => {
     view = new MapView(mapElement, style, {
       contextMenu: (at, screen) => (menu = { ...screen, items: mapMenu(at) }),
@@ -44,6 +59,7 @@
       },
       stopMoved: (id, to) => planner.moveTo(id, to),
       insertShaping: (at, before) => planner.insertShaping(at, before),
+      chooseRoute: (index) => planner.chooseRoute(index),
       moved: () => (menu = null),
     });
     // A link with a plan opens it, also one pasted into this tab, which changes only the hash.
@@ -82,7 +98,7 @@
   $effect(() => {
     const route = planner.route;
     if (route.status === 'ready') {
-      view?.showRoute(route.track.coordinates);
+      view?.showRoutes(route.tracks.map((track) => ({ line: track.coordinates, label: kilometres(track.length) })), route.selected);
       const line = route.track.coordinates;
       const ends = [line[0], line.at(-1)!].map((p) => `${p.latitude.toFixed(3)},${p.longitude.toFixed(3)}`).join('|');
       if (ends !== fittedEnds) view?.fit(line, padding());
@@ -90,7 +106,7 @@
     } else if (route.status === 'failed') {
       view?.clearPreview();
     } else if (route.status === 'idle') {
-      view?.showRoute([]);
+      view?.showRoutes([], 0);
       fittedEnds = '';
     }
   });
@@ -101,6 +117,11 @@
     const hash = withPlan(location.hash, planner.planState);
     if (`#${hash}` !== location.hash) history.replaceState(null, '', `${location.pathname}${location.search}#${hash}`);
   });
+
+  const tenths = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  function kilometres(metres: number): string {
+    return `${tenths.format(metres / 1000)} km`;
+  }
 
   /** Room for the card: beside it on a wide window, above it on a phone. */
   function padding() {
@@ -191,7 +212,10 @@
 
 <div id="map" bind:this={mapElement} aria-label="Map"></div>
 
-<aside class="card glass" aria-label="Route planner" bind:this={card}>
+<aside class="card glass" class:collapsed aria-label="Route planner" bind:this={card}>
+  <button type="button" class="sheet-handle" aria-label={collapsed ? 'Show the planner' : 'Put the planner away'}
+          aria-expanded={!collapsed} onpointerdown={handleDown} onpointerup={handleUp}
+          onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); collapsed = !collapsed; } }}></button>
   <header class="card-head">
     <a class="brand" href="../">
       <img src={icon} alt="" width="36" height="36">
@@ -215,6 +239,10 @@
 
   <div class="card-section route-section">
     <RouteSummary route={planner.route} />
+    {#if planner.route.status === 'ready' && planner.route.tracks.length > 1}
+      <Pills label="Routes" value={String(planner.route.selected)} onchoose={(id) => planner.chooseRoute(Number(id))}
+             options={planner.route.tracks.map((track, index) => ({ id: String(index), title: kilometres(track.length) }))} />
+    {/if}
     {#if planner.route.status === 'ready'}
       <ElevationProfile track={planner.route.track} onpoint={(point) => view?.showPosition(point)} />
     {/if}

@@ -14,6 +14,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import workerURL from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import type { FeatureCollection } from 'geojson';
 import { insertionIndex, prefix, project, stopPositions, suffix, type Coordinate } from '../core/geodesy';
+import { labelAnchors } from '../core/labels';
 import { darkStyles, styleURL } from '../mapStyles';
 import type { Stop } from './planner.svelte';
 
@@ -23,6 +24,7 @@ maplibregl.setWorkerUrl(workerURL);
  *  below the labels (`add_route_anchor` in the app's build_styles.py). */
 const routeAnchor = 'route-anchor';
 const routeSource = 'planner-route';
+const alternativesSource = 'planner-alternatives';
 const previewSource = 'planner-preview';
 const ghostSource = 'planner-ghost';
 const positionSource = 'planner-position';
@@ -32,6 +34,10 @@ const routeColor = '#E03A3E';
  *  that instead (`MapPointerController.lineReach`, `pointReach`). */
 const lineReach = 12;
 const pointReach = 14;
+/** A finger held this long, moving less than `holdSlop` px, is a long press: the touch screen's
+ *  right-click. iOS Safari sends no `contextmenu` for it. */
+const holdDuration = 550;
+const holdSlop = 10;
 
 export interface MapEvents {
   /** A right-click on the map, at a point on screen. */
@@ -40,6 +46,8 @@ export interface MapEvents {
   pointMenu: (id: number, screen: { x: number; y: number }) => void;
   /** A stop's or bend's marker was dragged somewhere else. */
   stopMoved: (id: number, to: Coordinate) => void;
+  /** An alternative's line or label was clicked. */
+  chooseRoute: (index: number) => void;
   /** The line was dragged out into a bend, which goes before the waypoint at `before`. */
   insertShaping: (at: Coordinate, before: number) => void;
   /** The map moved, so a menu over it is no longer where it pointed. */
@@ -56,6 +64,10 @@ export class MapView {
   readonly map: maplibregl.Map;
   private shownStyle: string;
   private line: Coordinate[] = [];
+  /** Every route found, and which is the chosen one (`line`). */
+  private routes: Coordinate[][] = [];
+  private selected = 0;
+  private labels: maplibregl.Marker[] = [];
   private placed: Placed[] = [];
   private editable = true;
   private markers = new Map<number, { marker: maplibregl.Marker; signature: string }>();
@@ -64,6 +76,11 @@ export class MapView {
   private pulling: { before: number; positions: number[]; base: Coordinate[]; from: maplibregl.Point; at: Coordinate } | null = null;
   /** The ghost dot's place on the line, while the pointer is near enough to grab it. */
   private grabbable: { at: Coordinate; position: number } | null = null;
+  /** The chosen line was pressed: the click that follows is about it, not an alternative under it. */
+  private pressedLine = false;
+  /** When a menu last opened, so a long press doesn't open a second one where the browser (Android)
+   *  sent its own `contextmenu` for the same press. */
+  private menuOpenedAt = 0;
 
   constructor(container: HTMLElement, style: string, private readonly events: MapEvents) {
     this.shownStyle = style;
@@ -93,12 +110,15 @@ export class MapView {
     this.map.on('style.load', () => this.addRouteLayers());
     this.map.on('contextmenu', (event) => {
       event.preventDefault();
+      this.menuOpenedAt = Date.now();
       this.events.contextMenu({ latitude: event.lngLat.lat, longitude: event.lngLat.lng }, event.point);
     });
+    this.watchLongPress();
     this.map.on('movestart', () => this.events.moved());
     this.map.on('mousemove', (event) => this.pointerMoved(event));
     this.map.on('mousedown', (event) => this.pointerDown(event));
     this.map.on('mouseup', (event) => this.pointerUp(event));
+    this.map.on('click', (event) => this.clicked(event));
     this.map.getCanvasContainer().addEventListener('mouseleave', () => { if (!this.pulling) this.setGhost(null); });
   }
 
@@ -126,9 +146,21 @@ export class MapView {
     const width = (low: number, high: number): maplibregl.ExpressionSpecification =>
       ['interpolate', ['exponential', 1.5], ['zoom'], 8, low, 18, high];
     map.addSource(routeSource, { type: 'geojson', data: lineFeature(this.line) });
+    map.addSource(alternativesSource, { type: 'geojson', data: this.alternativesFeature() });
     map.addSource(previewSource, { type: 'geojson', data: empty });
     map.addSource(ghostSource, { type: 'geojson', data: empty });
     map.addSource(positionSource, { type: 'geojson', data: empty });
+    // The routes not chosen, in grey under the chosen one, as the app draws them.
+    map.addLayer({
+      id: 'planner-alternatives-casing', type: 'line', source: alternativesSource,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': this.isDark ? '#0E0F11' : '#FFFFFF', 'line-opacity': 0.8, 'line-width': width(5, 16) },
+    }, before);
+    map.addLayer({
+      id: 'planner-alternatives-line', type: 'line', source: alternativesSource,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': this.isDark ? '#7C7C82' : '#9A9AA0', 'line-width': width(3, 11) },
+    }, before);
     map.addLayer({
       id: 'planner-route-casing', type: 'line', source: routeSource,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
@@ -157,11 +189,50 @@ export class MapView {
     (this.map.getSource(source) as maplibregl.GeoJSONSource | undefined)?.setData(data);
   }
 
-  /** The route's line, or none. A new line also ends the preview of the drag that asked for it. */
-  showRoute(line: Coordinate[]): void {
-    this.line = line;
-    this.setData(routeSource, lineFeature(line));
+  /** The routes found and the one chosen, or none. A new line also ends the preview of the drag
+   *  that asked for it. With more than one route each is labelled with its distance, where it
+   *  differs most from the others, and a click on a line or label chooses it. */
+  showRoutes(routes: { line: Coordinate[]; label: string }[], selected: number): void {
+    this.routes = routes.map((route) => route.line);
+    this.selected = selected;
+    this.line = this.routes[selected] ?? [];
+    this.setData(routeSource, lineFeature(this.line));
+    this.setData(alternativesSource, this.alternativesFeature());
     this.setData(previewSource, empty);
+    for (const label of this.labels) label.remove();
+    this.labels = [];
+    if (routes.length < 2) return;
+    labelAnchors(this.routes).forEach((anchor, index) => {
+      if (!anchor) return;
+      const element = document.createElement('button');
+      element.type = 'button';
+      element.className = `route-label${index === selected ? ' selected' : ''}`;
+      element.textContent = routes[index].label;
+      element.setAttribute('aria-label', `Route ${index + 1}, ${routes[index].label}`);
+      element.addEventListener('click', (event) => { event.stopPropagation(); this.events.chooseRoute(index); });
+      this.labels.push(new maplibregl.Marker({ element, anchor: 'bottom', offset: [0, -6] })
+        .setLngLat([anchor.longitude, anchor.latitude]).addTo(this.map));
+    });
+  }
+
+  private alternativesFeature(): FeatureCollection {
+    return { type: 'FeatureCollection', features: this.routes.flatMap((line, index) => index === this.selected || line.length < 2 ? [] : [{
+      type: 'Feature' as const, properties: { index },
+      geometry: { type: 'LineString' as const, coordinates: line.map((p) => [p.longitude, p.latitude]) },
+    }]) };
+  }
+
+  /** A click near an alternative's line chooses it. */
+  private clicked(event: maplibregl.MapMouseEvent): void {
+    if (this.pressedLine) {
+      this.pressedLine = false;
+      return;
+    }
+    if (this.routes.length < 2 || !this.map.getLayer('planner-alternatives-line')) return;
+    const { x, y } = event.point;
+    const hit = this.map.queryRenderedFeatures([[x - lineReach, y - lineReach], [x + lineReach, y + lineReach]],
+      { layers: ['planner-alternatives-line'] })[0];
+    if (hit) this.events.chooseRoute(Number(hit.properties?.index));
   }
 
   /** Takes a drag's preview down when its plan came to nothing. */
@@ -227,6 +298,7 @@ export class MapView {
     const pulling = this.pulling;
     if (!pulling) return;
     this.pulling = null;
+    this.pressedLine = true;
     this.setGhost(null);
     // A click on the line without a pull leaves the route as it was.
     if (Math.hypot(event.point.x - pulling.from.x, event.point.y - pulling.from.y) < 3) {
@@ -276,8 +348,10 @@ export class MapView {
     element.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       event.stopPropagation();
+      this.menuOpenedAt = Date.now();
       if (this.editable) this.events.pointMenu(stop.id, { x: event.clientX, y: event.clientY });
     });
+    element.dataset.stopId = String(stop.id);
     const marker = new maplibregl.Marker({ element, draggable: this.editable, anchor: role === 'end' ? 'bottom' : 'center' })
       .setLngLat([stop.place!.longitude, stop.place!.latitude])
       .addTo(this.map);
@@ -303,6 +377,45 @@ export class MapView {
       this.events.stopMoved(stop.id, { latitude: at.lat, longitude: at.lng });
     });
     return marker;
+  }
+
+  /** A long press on the map opens its menu, and on a marker the marker's, as a right-click does. */
+  private watchLongPress(): void {
+    const container = this.map.getContainer();
+    let hold: { timer: ReturnType<typeof setTimeout>; x: number; y: number } | null = null;
+    const cancel = () => {
+      if (hold) clearTimeout(hold.timer);
+      hold = null;
+    };
+    container.addEventListener('touchstart', (event) => {
+      cancel();
+      if (event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      const marker = (event.target as HTMLElement).closest<HTMLElement>('.stop-marker');
+      const startedAt = Date.now();
+      hold = {
+        x: touch.clientX, y: touch.clientY,
+        timer: setTimeout(() => {
+          hold = null;
+          if (this.menuOpenedAt >= startedAt) return; // the browser's own long-press menu came first
+          this.menuOpenedAt = Date.now();
+          const screen = { x: touch.clientX, y: touch.clientY };
+          if (marker?.dataset.stopId) {
+            if (this.editable) this.events.pointMenu(Number(marker.dataset.stopId), screen);
+            return;
+          }
+          const box = container.getBoundingClientRect();
+          const at = this.map.unproject([screen.x - box.left, screen.y - box.top]);
+          this.events.contextMenu({ latitude: at.lat, longitude: at.lng }, screen);
+        }, holdDuration),
+      };
+    }, { passive: true });
+    container.addEventListener('touchmove', (event) => {
+      const touch = event.touches[0];
+      if (hold && touch && Math.hypot(touch.clientX - hold.x, touch.clientY - hold.y) > holdSlop) cancel();
+    }, { passive: true });
+    container.addEventListener('touchend', cancel);
+    container.addEventListener('touchcancel', cancel);
   }
 
   /** Shows the whole of a line, clear of the card. */
