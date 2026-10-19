@@ -9,6 +9,7 @@
   import { planIn, withPlan } from './core/urlState';
   import { LocationService } from './lib/location.svelte';
   import { MapView } from './lib/mapView';
+  import { loadOverlays, loadShown, saveShown, type OverlayKind } from './lib/overlays';
   import { Planner } from './lib/planner.svelte';
   import { loadChoice, saveChoice, wantsDark, type MapChoice } from './mapStyles';
   import ContextMenu from './components/ContextMenu.svelte';
@@ -38,6 +39,14 @@
   let fileInput: HTMLInputElement;
 
   let choice = $state<MapChoice>(loadChoice());
+  /** The sport overlays shown, remembered; the mirror is asked only once one is. */
+  let overlays = $state<OverlayKind[]>(loadShown());
+  let overlayMessage = $state('');
+
+  function changeOverlays(shown: OverlayKind[]) {
+    overlays = shown;
+    saveShown(shown);
+  }
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
   let prefersDark = $state(systemDark.matches);
   const style = $derived(wantsDark(choice.appearance, prefersDark) ? choice.dark : choice.light);
@@ -150,6 +159,15 @@
   });
 
   $effect(() => view?.setStyle(style));
+  // Declared after onMount, so the map exists when it first runs: `view` isn't state, so an
+  // effect that ran before it would never run again.
+  $effect(() => {
+    view?.setOverlays(overlays);
+    if (!overlays.length) return;
+    loadOverlays().then((available) => {
+      overlayMessage = available ? '' : "The route overlays can't be loaded right now.";
+    });
+  });
   $effect(() => view?.showStops(planner.stops));
   $effect(() => view?.setEditable(!planner.line));
   $effect(() => view?.setDrawing(drawing));
@@ -360,7 +378,8 @@
           onundo={() => planner.undo()} onremove={() => planner.removeSelectedZone()} ondone={toggleDrawing} />
 {/if}
 
-<MapControls {choice} onchange={changeMap} location={geolocation.status} {locating} {centered} onlocate={locate} />
+<MapControls {choice} onchange={changeMap} location={geolocation.status} {locating} {centered} onlocate={locate}
+             {overlays} {overlayMessage} onoverlays={changeOverlays} />
 
 {#if droppingFile}
   <div class="drop-hint" aria-hidden="true"><span class="glass">Drop a GPX file to open it</span></div>

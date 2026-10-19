@@ -21,6 +21,7 @@ import type { FeatureCollection } from 'geojson';
 import { distance, insertionIndex, prefix, project, stopPositions, suffix, type Coordinate } from '../core/geodesy';
 import { labelAnchors } from '../core/labels';
 import { darkStyles, styleURL } from '../mapStyles';
+import { layerIDs, nameExpression, overlayKinds, type OverlayKind } from './overlays';
 import type { Stop, Zone } from './planner.svelte';
 
 maplibregl.setWorkerUrl(workerURL);
@@ -108,6 +109,8 @@ export class MapView {
   /** Our own move to the rider is under way: its movestart isn't the rider moving the map. */
   private easingToRider = false;
   private zones: Zone[] = [];
+  /** The sport overlays shown, kept across style changes. */
+  private overlays: OverlayKind[] = [];
   private selectedZone: number | null = null;
   /** The pen is out. */
   private drawing = false;
@@ -147,7 +150,10 @@ export class MapView {
     }), 'bottom-right');
 
     // A new style starts without our layers, so they go back in each time one loads.
-    this.map.on('style.load', () => this.addRouteLayers());
+    this.map.on('style.load', () => {
+      this.addRouteLayers();
+      this.applyOverlays(true);
+    });
     this.map.on('contextmenu', (event) => {
       event.preventDefault();
       this.menuOpenedAt = Date.now();
@@ -215,6 +221,29 @@ export class MapView {
       type: 'Feature' as const, properties: { selected: zone.id === this.selectedZone ? 1 : 0 },
       geometry: { type: 'Polygon' as const, coordinates: [[...zone.outline, zone.outline[0]].map((p) => [p.longitude, p.latitude])] },
     })) };
+  }
+
+  /** Shows the overlays in `shown` and hides the rest (`RouteOverlay.apply`). */
+  setOverlays(shown: OverlayKind[]): void {
+    this.overlays = shown;
+    this.applyOverlays(false);
+  }
+
+  /** The overlays' visibility; on a style just loaded also the badge their refs sit on and their
+   *  names' language, as the app sets them once per style. */
+  private applyOverlays(styleLoaded: boolean): void {
+    const map = this.map;
+    if (!map.getLayer(layerIDs('cycle')[0])) return;
+    if (styleLoaded) {
+      // A white square MapLibre tints per tier (an SDF image) and stretches round the text.
+      if (!map.hasImage('route-badge')) {
+        map.addImage('route-badge', { width: 8, height: 8, data: new Uint8Array(8 * 8 * 4).fill(255) }, { sdf: true });
+      }
+      for (const { id } of overlayKinds) map.setLayoutProperty(layerIDs(id)[2], 'text-field', nameExpression(navigator.language));
+    }
+    for (const { id } of overlayKinds) {
+      for (const layer of layerIDs(id)) map.setLayoutProperty(layer, 'visibility', this.overlays.includes(id) ? 'visible' : 'none');
+    }
   }
 
   /** Whether the route can be reshaped: not a line kept as recorded. */

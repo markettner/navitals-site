@@ -1,9 +1,12 @@
 // Where the rider is, for the dot, the Locate button and "My Location" as a stop.
 //
-// One watch for all three. It takes a fix up to five minutes old, so a browser that knows where it
-// is answers at once. A fresh fix from the system can take a minute on a Mac, and MapLibre's own
-// control, given `positionOptions` of ours, had lost its defaults and waited for exactly that.
-// A timeout doesn't end the watch: the fix may still come, and the button says it is still looking.
+// One watch for all three, at high accuracy. Measured in Chrome on Markus's Mac (2026-10-19), with
+// location not yet running: low accuracy, which is what MapLibre's control and our first version
+// asked for, didn't answer in two minutes; high accuracy answered in 11 ms. A Mac has no GPS, so
+// high accuracy costs nothing there; a phone may use its GPS while the planner is open.
+//
+// It takes a fix up to five minutes old, so a browser that knows where it is answers at once. A
+// timeout doesn't end the watch: the fix may still come, and the button says it is still looking.
 //
 // The browser's cache that `maximumAge` reads is the tab's own, so a second planner tab used to wait
 // for the system all over again. Open planner tabs therefore share their fixes (a BroadcastChannel,
@@ -21,7 +24,7 @@ export interface Fix extends Coordinate {
   at: number;
 }
 
-const options: PositionOptions = { enableHighAccuracy: false, maximumAge: 300_000, timeout: 15_000 };
+const options: PositionOptions = { enableHighAccuracy: true, maximumAge: 300_000, timeout: 15_000 };
 /** How old a fix from another tab may be and still stand for where the rider is. */
 const sharedAge = 300_000;
 /** How long a hidden tab keeps watching before it lets go. */

@@ -2,6 +2,7 @@
   // The capsule at the top right, as Apple Maps and the app have it: the map's settings and the
   // rider's location, above MapLibre's zoom and compass. The settings open beside it.
   import type { LocationStatus } from '../lib/location.svelte';
+  import type { OverlayKind } from '../lib/overlays';
   import type { MapChoice } from '../mapStyles';
   import Icon from './Icon.svelte';
   import MapSettings from './MapSettings.svelte';
@@ -15,8 +16,11 @@
     /** The map is centred on the rider: the arrow fills. */
     centered: boolean;
     onlocate: () => void;
+    overlays: OverlayKind[];
+    overlayMessage: string;
+    onoverlays: (shown: OverlayKind[]) => void;
   }
-  let { choice, onchange, location, locating, centered, onlocate }: Props = $props();
+  let { choice, onchange, location, locating, centered, onlocate, overlays, overlayMessage, onoverlays }: Props = $props();
 
   let open = $state(false);
   let controls: HTMLElement;
@@ -56,7 +60,7 @@
   {#if open}
     <section class="map-popover glass" aria-label="Map settings">
       <h2>Map</h2>
-      <MapSettings {choice} {onchange} />
+      <MapSettings {choice} {onchange} {overlays} {overlayMessage} {onoverlays} />
     </section>
   {/if}
 </div>

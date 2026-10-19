@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "maplibre-gl": "6.11.2",
+    "pmtiles": "4.5.0",
     "svelte": "5.57.1"
   },
   "devDependencies": {
