@@ -38,7 +38,6 @@
     --gutter: 16px;
     --field: rgba(255, 255, 255, 0.7);
     --route: #E03A3E;
-    --location: #1A84FF;
     --pen: #FF9500;
     color-scheme: light dark;
 }
@@ -147,7 +146,7 @@ body {
 .stop-icon.shaping { width: 12px; height: 12px; margin: 13px 5px 0; border-width: 2px; border-color: var(--route); background: var(--selected); }
 .stop-icon.place { width: 12px; height: 12px; margin: 0 5px; border-width: 2px; }
 /* "My Location": the location arrow in the start's ring, in the dot's blue. */
-.stop-icon.current { color: #FFFFFF; background: var(--location); border-color: var(--location); }
+.stop-icon.current { color: #FFFFFF; background: var(--accent); border-color: var(--accent); }
 .stop-icon .icon { display: block; }
 
 /* A bend a drag left: listed by the street it was dragged onto, in grey, with no field. */
@@ -190,7 +189,7 @@ body {
 .results li.mine[aria-disabled="true"] { cursor: default; }
 .mine-icon {
     width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
-    color: #FFFFFF; background: var(--location);
+    color: #FFFFFF; background: var(--accent);
 }
 .results li.mine[aria-disabled="true"] .mine-icon { background: var(--muted); }
 .result-name { font-weight: 500; }
@@ -249,22 +248,32 @@ body {
     position: fixed; z-index: 2; top: var(--gutter); left: calc(var(--gutter) * 2 + 380px);
     display: flex; align-items: center; gap: 10px;
 }
-.tool-button, .tool-round, .tool-pill { height: 44px; border-radius: 999px; box-shadow: 0 6px 20px var(--glass-shadow); }
-.tool-button {
-    display: inline-flex; align-items: center; gap: 8px; padding: 0 16px 0 13px;
-    font: inherit; font-size: 16px; font-weight: 500; color: var(--ink); cursor: pointer;
-}
+.tool-round, .tool-pill { height: 44px; border-radius: 999px; box-shadow: 0 6px 20px var(--glass-shadow); }
 .tool-pill { display: flex; padding: 0 3px; }
 .tool-icon, .tool-round {
     width: 44px; display: grid; place-items: center; padding: 0;
     font: inherit; color: var(--ink); cursor: pointer;
 }
 .tool-icon { height: 44px; background: transparent; border: 0; border-radius: 999px; width: 42px; }
-.tool-button:hover, .tool-round:hover:not(:disabled), .tool-icon:hover:not(:disabled) { color: var(--kicker); }
+.tool-round:hover:not(:disabled), .tool-icon:hover:not(:disabled) { color: var(--kicker); }
 .tool-icon:disabled, .tool-round:disabled { color: var(--muted); opacity: 0.45; cursor: default; }
 .tool-round[aria-pressed="true"] { color: #FFFFFF; background: var(--red-ui); border-color: var(--red-ui); }
-.tool-button:focus-visible, .tool-icon:focus-visible, .tool-round:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tool-icon:focus-visible, .tool-round:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .icon { display: block; flex: none; }
+
+/* ---------- The rider's puck: the site's heart, beating ---------- */
+.location-puck { position: relative; width: 26px; height: 26px; pointer-events: none; }
+.location-puck svg { position: relative; display: block; filter: drop-shadow(0 3px 5px rgba(30, 10, 0, 0.35)); animation: heartbeat 1.05s ease-in-out infinite; }
+.location-puck-halo {
+    position: absolute; inset: 0; border-radius: 50%; background: #FB2A2A;
+    animation: halo 1.05s ease-out infinite;
+}
+@keyframes heartbeat { 0%, 56%, 100% { transform: scale(1); } 14% { transform: scale(1.14); } 42% { transform: scale(1.08); } 28% { transform: scale(1); } }
+@keyframes halo { from { opacity: 0.5; transform: scale(1); } to { opacity: 0; transform: scale(2.7); } }
+@media (prefers-reduced-motion: reduce) {
+    .location-puck svg, .location-puck-halo { animation: none; }
+    .location-puck-halo { display: none; }
+}
 
 /* ---------- The pen ---------- */
 .tool-round[aria-pressed="true"] { color: #FFFFFF; background: var(--pen); border-color: var(--pen); }
@@ -310,7 +319,9 @@ body {
 .control-button:hover:not(:disabled), .control-button.active { color: var(--kicker); }
 .control-button:disabled { opacity: 0.4; cursor: default; }
 .control-button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 22px; }
-.control-button.locate.found { color: var(--location); }
+/* Centred on the rider: the arrow fills in red, and goes back to an outline once the map moves. */
+.control-button.locate.centered { color: var(--accent); }
+.control-button.locate.centered polygon { fill: currentColor; }
 .control-button.locate.blocked { color: var(--muted); }
 .control-button.locate.waiting .icon { animation: locating 1.2s ease-in-out infinite; }
 @keyframes locating { 50% { opacity: 0.3; } }
@@ -323,9 +334,6 @@ body {
 .map-popover h2 { font-size: 15px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
 .map-settings { display: grid; gap: 14px; }
 
-.card-footer { margin-top: 12px; font-size: 13px; }
-.card-footer a { color: var(--muted); }
-.card-footer a:hover { color: var(--ink); }
 
 /* ---------- On the map ---------- */
 .stop-marker { cursor: grab; }
@@ -362,6 +370,10 @@ body {
 .route-label.selected { color: #FFFFFF; background: var(--route); }
 
 /* ---------- MapLibre's controls, in the card's glass, a capsule like ours ---------- */
+/* The privacy link sits on the attribution's line, and folds away with it. */
+.maplibregl-ctrl-attrib:not(.maplibregl-compact) .maplibregl-ctrl-attrib-inner,
+.maplibregl-compact-show .maplibregl-ctrl-attrib-inner { display: inline; }
+.maplibregl-compact:not(.maplibregl-compact-show) .attrib-privacy { display: none; }
 .maplibregl-ctrl-group {
     background: var(--glass) !important;
     -webkit-backdrop-filter: blur(22px) saturate(1.5);
@@ -402,10 +414,8 @@ body {
         top: auto; left: var(--gutter); right: var(--gutter); bottom: var(--gutter);
         width: auto; max-height: 45%;
     }
-    /* The toolbar takes the top left, and Import shows its icon only. */
+    /* The toolbar takes the top left. */
     .toolbar { left: var(--gutter); }
-    .tool-button { padding: 0; width: 44px; justify-content: center; }
-    .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
     .pen-bar { left: var(--gutter); right: var(--gutter); bottom: calc(var(--sheet-height, 0px) + 2 * var(--gutter)); }
     .map-popover { width: calc(100vw - 2 * var(--gutter) - 54px); max-height: calc(100vh - var(--sheet-height, 0px) - 3 * var(--gutter)); }
     /* Above the sheet, whatever its height (main.ts measures it). */

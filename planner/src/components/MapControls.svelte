@@ -12,9 +12,11 @@
     location: LocationStatus;
     /** Whether the map is following a Locate press that hasn't found the rider yet. */
     locating: boolean;
+    /** The map is centred on the rider: the arrow fills. */
+    centered: boolean;
     onlocate: () => void;
   }
-  let { choice, onchange, location, locating, onlocate }: Props = $props();
+  let { choice, onchange, location, locating, centered, onlocate }: Props = $props();
 
   let open = $state(false);
   let controls: HTMLElement;
@@ -46,7 +48,7 @@
       <Icon name="layers" />
     </button>
     <button type="button" class="control-button locate" aria-label="Show my location" title={locateTitle}
-            disabled={location === 'unavailable'} class:waiting={locating} class:found={location === 'on'}
+            disabled={location === 'unavailable'} class:waiting={locating} class:centered aria-pressed={centered}
             class:blocked={location === 'denied'} onclick={onlocate}>
       <Icon name="navigation" size={18} />
     </button>

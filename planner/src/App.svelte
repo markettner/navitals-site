@@ -87,6 +87,8 @@
 
   /** A Locate press waiting for the first fix, which then brings the map to the rider. */
   let locating = $state(false);
+  /** The map is centred on the rider, until it is moved. */
+  let centered = $state(false);
 
   function locate() {
     if (geolocation.status === 'denied' || geolocation.status === 'unavailable') return;
@@ -110,6 +112,7 @@
       chooseRoute: (index) => planner.chooseRoute(index),
       penStroke: (stroke, metresPerPoint) => planner.draw(stroke, metresPerPoint),
       penClick: (at) => planner.penClicked(at),
+      centered: (value) => (centered = value),
       moved: () => (menu = null),
     });
     // A link with a plan opens it, also one pasted into this tab, which changes only the hash.
@@ -332,13 +335,12 @@
     {#if planner.importMessage}<p class="summary-message" role="alert">{planner.importMessage}</p>{/if}
   </div>
 
-  <p class="card-footer"><a href="../privacy_policy.html#web-planner">Privacy</a></p>
 </aside>
 
 <!-- Beside the card, as komoot's: bringing a route in, going back and forth, drawing on it. -->
 <div class="toolbar" role="toolbar" aria-label="Route">
-  <button type="button" class="tool-button glass" title="Import a GPX file, or drop one on the map" onclick={() => fileInput.click()}>
-    <Icon name="import" /><span class="tool-label">Import GPX</span>
+  <button type="button" class="tool-round glass" aria-label="Import GPX" title="Import a GPX file, or drop one on the map" onclick={() => fileInput.click()}>
+    <Icon name="import" />
   </button>
   <input bind:this={fileInput} type="file" accept=".gpx,application/gpx+xml" hidden
          onchange={(event) => { importFile(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} />
@@ -358,7 +360,7 @@
           onundo={() => planner.undo()} onremove={() => planner.removeSelectedZone()} ondone={toggleDrawing} />
 {/if}
 
-<MapControls {choice} onchange={changeMap} location={geolocation.status} {locating} onlocate={locate} />
+<MapControls {choice} onchange={changeMap} location={geolocation.status} {locating} {centered} onlocate={locate} />
 
 {#if droppingFile}
   <div class="drop-hint" aria-hidden="true"><span class="glass">Drop a GPX file to open it</span></div>

@@ -37,8 +37,9 @@ const locationSource = 'planner-location';
 const zonesSource = 'planner-zones';
 /** The app's accent, which is the planned route's colour there. */
 const routeColor = '#E03A3E';
-/** The rider's dot: the system's blue, as MapLibre's own control and the app draw it. */
-const locationColor = '#1A84FF';
+/** The rider's puck: the site's red heart in a white ring (trailmap.js), and its accuracy in red. */
+const locationColor = '#FB2A2A';
+const heartPath = 'M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.6 4.5c2.1 0 3.6 1.1 4.4 2.6.8-1.5 2.3-2.6 4.4-2.6 3.6 0 5.7 3.8 4.2 7.3C19.5 16.4 12 21 12 21z';
 /** The pen's ink: the app's orange, apart from the route's red. */
 const penColor = '#FF9500';
 /** A stroke keeps a point only this many pixels from the last (`PenCanvas`'s 4 pt). */
@@ -67,6 +68,8 @@ export interface MapEvents {
   penStroke: (stroke: Coordinate[], metresPerPoint: number) => void;
   /** A click with the pen out, without drawing. */
   penClick: (at: Coordinate) => void;
+  /** The map is centred on the rider (after Locate), or no longer is (it was moved). */
+  centered: (centered: boolean) => void;
   /** The map moved, so a menu over it is no longer where it pointed. */
   moved: () => void;
 }
@@ -99,6 +102,11 @@ export class MapView {
    *  sent its own `contextmenu` for the same press. */
   private menuOpenedAt = 0;
   private location: (Coordinate & { accuracy: number }) | null = null;
+  private puck: maplibregl.Marker | null = null;
+  /** The map is centred on the rider and follows their fixes, until it is moved. */
+  private following = false;
+  /** Our own move to the rider is under way: its movestart isn't the rider moving the map. */
+  private easingToRider = false;
   private zones: Zone[] = [];
   private selectedZone: number | null = null;
   /** The pen is out. */
@@ -131,6 +139,13 @@ export class MapView {
         'Routes <a href="https://brouter.de" target="_blank" rel="noopener">BRouter</a>',
       ],
     }), 'bottom-right');
+    // The privacy policy goes with the small print, as Apple Maps' Legal does, after the credits.
+    // MapLibre sorts its own entries by length and rewrites only its inner text, so the link is
+    // added beside that, where it stays last.
+    const privacy = document.createElement('span');
+    privacy.className = 'attrib-privacy';
+    privacy.innerHTML = ' | <a href="../privacy_policy.html#web-planner">Privacy</a>';
+    container.querySelector('.maplibregl-ctrl-attrib-inner')?.after(privacy);
 
     // A new style starts without our layers, so they go back in each time one loads.
     this.map.on('style.load', () => this.addRouteLayers());
@@ -140,7 +155,12 @@ export class MapView {
       this.events.contextMenu({ latitude: event.lngLat.lat, longitude: event.lngLat.lng }, event.point);
     });
     this.watchLongPress();
-    this.map.on('movestart', () => this.events.moved());
+    this.map.on('movestart', () => {
+      this.events.moved();
+      if (this.easingToRider || !this.following) return;
+      this.following = false;
+      this.events.centered(false);
+    });
     this.map.on('mousemove', (event) => this.pointerMoved(event));
     this.map.on('mousedown', (event) => this.pointerDown(event));
     this.map.on('mouseup', (event) => this.pointerUp(event));
@@ -273,10 +293,6 @@ export class MapView {
         'circle-stroke-color': locationColor, 'circle-stroke-opacity': 0.3, 'circle-stroke-width': 1,
       },
     });
-    map.addLayer({
-      id: 'planner-location', type: 'circle', source: locationSource,
-      paint: { 'circle-radius': 7, 'circle-color': locationColor, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 },
-    });
   }
 
   /** The rider's dot and its accuracy, or none. */
@@ -289,12 +305,51 @@ export class MapView {
       this.map.setPaintProperty('planner-location-accuracy', 'circle-radius', accuracyRadius(fix!.latitude));
     }
     this.setData(locationSource, fix ? pointFeature(fix, { accuracy: fix.accuracy }) : empty);
+    if (!fix) {
+      this.puck?.remove();
+      this.puck = null;
+      return;
+    }
+    if (!this.puck) {
+      // A marker, not a layer: the heart is a shape, and it beats. It takes no clicks, so the pen
+      // and the route's markers work over it.
+      const element = document.createElement('div');
+      element.className = 'location-puck';
+      element.setAttribute('aria-hidden', 'true');
+      element.innerHTML = `<span class="location-puck-halo"></span><svg viewBox="-13 -13 26 26" width="26" height="26">`
+        + `<circle r="12" fill="#FFFFFF"/><circle r="9.8" fill="${locationColor}"/>`
+        + `<path d="${heartPath}" fill="#FFFFFF" transform="translate(-5.45 -5.72) scale(0.454)"/></svg>`;
+      this.puck = new maplibregl.Marker({ element }).setLngLat([fix.longitude, fix.latitude]).addTo(this.map);
+    } else {
+      this.puck.setLngLat([fix.longitude, fix.latitude]);
+    }
+    if (this.following) this.easeToRider({ center: [fix.longitude, fix.latitude] });
   }
 
-  /** Moves the map to the rider, close enough to see the streets around them. */
-  showAround(point: Coordinate, padding: maplibregl.PaddingOptions): void {
-    this.map.easeTo({ center: [point.longitude, point.latitude], zoom: Math.max(this.map.getZoom(), 14), padding, duration: 800 });
+  /** Centres the map on the rider, close enough to see the streets around them, clear of the card
+   *  (as an offset: a padding given to easeTo would stay on the map for every move after it). The
+   *  map then follows them until it is moved. */
+  showAround(point: Coordinate, padding: { top: number; bottom: number; left: number; right: number }): void {
+    this.following = true;
+    this.events.centered(true);
+    this.easeToRider({
+      center: [point.longitude, point.latitude], zoom: Math.max(this.map.getZoom(), 14),
+      offset: [(padding.left - padding.right) / 2, (padding.top - padding.bottom) / 2],
+    });
   }
+
+  private easeToRider(options: maplibregl.EaseToOptions): void {
+    // easeTo stops a move under way (its moveend comes first) and starts ours, both before it
+    // returns; so the end that matters is listened for after it. Without motion it is already over.
+    this.easingToRider = true;
+    if (options.offset) this.riderOffset = options.offset;
+    this.map.easeTo({ duration: 800, ...options, offset: this.riderOffset });
+    if (this.map.isMoving()) this.map.once('moveend', () => (this.easingToRider = false));
+    else this.easingToRider = false;
+  }
+
+  /** The offset of the last move to the rider, kept for following them. */
+  private riderOffset: maplibregl.PointLike = [0, 0];
 
   private setData(source: string, data: FeatureCollection): void {
     (this.map.getSource(source) as maplibregl.GeoJSONSource | undefined)?.setData(data);
