@@ -1,26 +1,37 @@
 <script lang="ts">
   // The planner: a full-window map with the card at the leading edge (a sheet at the bottom on a
   // phone), as the app lays out iPad and Mac.
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import type { Coordinate } from './core/geodesy';
   import { fileName, writeRoute } from './core/gpx';
   import { GPXError, parseGPX } from './core/gpxReader';
   import { sports } from './core/route';
   import { planIn, withPlan } from './core/urlState';
+  import { LocationService } from './lib/location.svelte';
   import { MapView } from './lib/mapView';
   import { Planner } from './lib/planner.svelte';
   import { loadChoice, saveChoice, wantsDark, type MapChoice } from './mapStyles';
   import ContextMenu from './components/ContextMenu.svelte';
   import ElevationProfile from './components/ElevationProfile.svelte';
+  import Icon from './components/Icon.svelte';
   import LineRoute from './components/LineRoute.svelte';
-  import MapSettings from './components/MapSettings.svelte';
+  import MapControls from './components/MapControls.svelte';
+  import PenBar from './components/PenBar.svelte';
   import Pills from './components/Pills.svelte';
   import RouteSummary from './components/RouteSummary.svelte';
   import StopList from './components/StopList.svelte';
 
   let { icon }: { icon: string } = $props();
 
-  const planner = new Planner();
+  const geolocation = new LocationService();
+  const planner = new Planner({
+    locate: () => {
+      if (geolocation.status === 'unavailable') return 'unavailable';
+      if (geolocation.status === 'denied') return 'blocked';
+      geolocation.start();
+      return 'locating';
+    },
+  });
   let view: MapView | undefined;
   let mapElement: HTMLElement;
   let card: HTMLElement;
@@ -50,9 +61,46 @@
     collapsed = moved > 24 ? true : moved < -24 ? false : !collapsed;
   }
 
+  /** The pen is out: strokes on the map edit the route (`Planner.draw`). */
+  let drawing = $state(false);
+  const touchScreen = window.matchMedia('(pointer: coarse)').matches;
+  const canDraw = $derived(planner.route.status === 'ready');
+
+  async function toggleDrawing() {
+    if (drawing) {
+      drawing = false;
+      planner.endDrawing();
+      return;
+    }
+    if (!canDraw) return;
+    drawing = true;
+    menu = null;
+    // The map is what is being drawn on: on a phone the sheet goes down, and the whole route shows.
+    if (window.innerWidth <= 640) collapsed = true;
+    // Once the sheet is down and the pen bar up, so the route is framed in the map that is left. The
+    // bar sits on the sheet's measured height, which the ResizeObserver sets a frame later.
+    await tick();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const route = planner.route;
+    if (route.status === 'ready') view?.fit(route.track.coordinates, padding());
+  }
+
+  /** A Locate press waiting for the first fix, which then brings the map to the rider. */
+  let locating = $state(false);
+
+  function locate() {
+    if (geolocation.status === 'denied' || geolocation.status === 'unavailable') return;
+    if (geolocation.fix) view?.showAround(geolocation.fix, padding());
+    else locating = true;
+    geolocation.start();
+  }
+
   onMount(() => {
     view = new MapView(mapElement, style, {
-      contextMenu: (at, screen) => (menu = { ...screen, items: mapMenu(at) }),
+      contextMenu: (at, screen) => {
+        const items = mapMenu(at);
+        menu = items.length ? { ...screen, items } : null;
+      },
       pointMenu: (id, screen) => {
         const items = pointMenu(id);
         menu = items.length ? { ...screen, items } : null;
@@ -60,6 +108,8 @@
       stopMoved: (id, to) => planner.moveTo(id, to),
       insertShaping: (at, before) => planner.insertShaping(at, before),
       chooseRoute: (index) => planner.chooseRoute(index),
+      penStroke: (stroke, metresPerPoint) => planner.draw(stroke, metresPerPoint),
+      penClick: (at) => planner.penClicked(at),
       moved: () => (menu = null),
     });
     // A link with a plan opens it, also one pasted into this tab, which changes only the hash.
@@ -70,8 +120,15 @@
     };
     openLinked();
     window.addEventListener('hashchange', openLinked);
+    const stopFixes = geolocation.onFix((fix) => {
+      view?.showLocation(fix);
+      planner.positionArrived(fix);
+      if (locating) view?.showAround(fix, padding());
+      locating = false;
+    });
+    if (geolocation.fix) view.showLocation(geolocation.fix);
     // For poking at the map from the console while developing.
-    if (import.meta.env.DEV) (window as unknown as { plannerMap: MapView }).plannerMap = view;
+    if (import.meta.env.DEV) Object.assign(window, { plannerMap: view, plannerLocation: geolocation, planner });
 
     const follow = (event: MediaQueryListEvent) => (prefersDark = event.matches);
     systemDark.addEventListener('change', follow);
@@ -82,6 +139,7 @@
     resize.observe(card);
     return () => {
       window.removeEventListener('hashchange', openLinked);
+      stopFixes();
       systemDark.removeEventListener('change', follow);
       resize.disconnect();
       view?.map.remove();
@@ -91,6 +149,26 @@
   $effect(() => view?.setStyle(style));
   $effect(() => view?.showStops(planner.stops));
   $effect(() => view?.setEditable(!planner.line));
+  $effect(() => view?.setDrawing(drawing));
+  $effect(() => view?.showZones(planner.zones, planner.selectedZone));
+  // The stroke stays on the map while its edit is planned, and goes with the answer.
+  $effect(() => {
+    if (planner.penStatus?.kind !== 'planning') view?.clearStroke();
+  });
+  // No route, no pen: a route cleared or failing puts it away.
+  $effect(() => {
+    if (drawing && planner.route.status !== 'ready' && planner.route.status !== 'planning') {
+      drawing = false;
+      planner.endDrawing();
+    }
+  });
+  // Refused or impossible: nothing waits for a fix any more.
+  $effect(() => {
+    if (geolocation.status !== 'denied' && geolocation.status !== 'unavailable') return;
+    locating = false;
+    planner.locationFailed();
+  });
+  const offersMyLocation = $derived(geolocation.status === 'unavailable' ? null : geolocation.status === 'denied' ? 'blocked' : 'offer');
 
   /** The ends of the plan last shown whole. A new start or destination is shown whole again;
    *  a new stop, bend, sport or order leaves the view where the rider put it. */
@@ -123,16 +201,19 @@
     return `${tenths.format(metres / 1000)} km`;
   }
 
-  /** Room for the card: beside it on a wide window, above it on a phone. */
+  /** Room for the card: beside it on a wide window, above it on a phone. And above the pen's bar,
+   *  while it is out. */
   function padding() {
     const box = card.getBoundingClientRect();
+    const bar = document.querySelector('.pen-bar')?.getBoundingClientRect();
+    const clear = (bottom: number) => (bar ? Math.max(bottom, window.innerHeight - bar.top + 24) : bottom);
     return window.innerWidth > 640
-      ? { top: 48, bottom: 48, left: box.right + 32, right: 64 }
-      : { top: 48, bottom: window.innerHeight - box.top + 24, left: 32, right: 32 };
+      ? { top: 72, bottom: clear(48), left: box.right + 32, right: 72 }
+      : { top: 72, bottom: clear(window.innerHeight - box.top + 24), left: 32, right: 72 };
   }
 
   function mapMenu(at: Coordinate): MenuItem[] {
-    if (planner.line) return [];
+    if (planner.line || drawing) return [];
     const hasEnds = Boolean(planner.stops[0].place && planner.stops.at(-1)!.place);
     return [
       { label: 'Start here', action: () => planner.placeAt(at, 'start') },
@@ -179,9 +260,12 @@
   }
 
   function keydown(event: KeyboardEvent) {
-    const target = event.target as HTMLElement | null;
     // Typing in a field undoes the typing, not the plan.
-    if (target?.closest('input, textarea, [contenteditable]')) return;
+    if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable]')) return;
+    if (event.key === 'Escape' && drawing && !menu) {
+      toggleDrawing();
+      return;
+    }
     const command = event.metaKey || event.ctrlKey;
     if (command && event.key.toLowerCase() === 'z') {
       event.preventDefault();
@@ -222,10 +306,6 @@
       <span>Navitals</span>
     </a>
     <span class="kicker">Route Planner</span>
-    <span class="history">
-      <button type="button" class="icon-button" aria-label="Undo" title="Undo (⌘Z)" disabled={!planner.canUndo} onclick={() => planner.undo()}>↶</button>
-      <button type="button" class="icon-button" aria-label="Redo" title="Redo (⇧⌘Z)" disabled={!planner.canRedo} onclick={() => planner.redo()}>↷</button>
-    </span>
   </header>
 
   <div class="card-section">
@@ -233,12 +313,12 @@
     {#if planner.line}
       <LineRoute {planner} />
     {:else}
-      <StopList {planner} bias={() => view?.center ?? { latitude: 52.52, longitude: 13.405 }} />
+      <StopList {planner} myLocation={offersMyLocation} bias={() => view?.center ?? { latitude: 52.52, longitude: 13.405 }} />
     {/if}
   </div>
 
   <div class="card-section route-section">
-    <RouteSummary route={planner.route} />
+    <RouteSummary route={planner.route} locating={planner.waitingForLocation} />
     {#if planner.route.status === 'ready' && planner.route.tracks.length > 1}
       <Pills label="Routes" value={String(planner.route.selected)} onchoose={(id) => planner.chooseRoute(Number(id))}
              options={planner.route.tracks.map((track, index) => ({ id: String(index), title: kilometres(track.length) }))} />
@@ -246,20 +326,39 @@
     {#if planner.route.status === 'ready'}
       <ElevationProfile track={planner.route.track} onpoint={(point) => view?.showPosition(point)} />
     {/if}
-    <div class="file-actions">
-      {#if planner.route.status === 'ready'}
-        <button type="button" class="primary-button" onclick={exportGPX}>Export GPX</button>
-      {/if}
-      <button type="button" class="text-button" onclick={() => fileInput.click()}>Import GPX</button>
-      <input bind:this={fileInput} type="file" accept=".gpx,application/gpx+xml" hidden
-             onchange={(event) => { importFile(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} />
-    </div>
+    {#if planner.route.status === 'ready'}
+      <button type="button" class="primary-button" onclick={exportGPX}>Export GPX</button>
+    {/if}
     {#if planner.importMessage}<p class="summary-message" role="alert">{planner.importMessage}</p>{/if}
   </div>
 
-  <MapSettings {choice} onchange={changeMap} />
   <p class="card-footer"><a href="../privacy_policy.html#web-planner">Privacy</a></p>
 </aside>
+
+<!-- Beside the card, as komoot's: bringing a route in, going back and forth, drawing on it. -->
+<div class="toolbar" role="toolbar" aria-label="Route">
+  <button type="button" class="tool-button glass" title="Import a GPX file, or drop one on the map" onclick={() => fileInput.click()}>
+    <Icon name="import" /><span class="tool-label">Import GPX</span>
+  </button>
+  <input bind:this={fileInput} type="file" accept=".gpx,application/gpx+xml" hidden
+         onchange={(event) => { importFile(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} />
+  <div class="tool-pill glass">
+    <button type="button" class="tool-icon" aria-label="Undo" title="Undo (⌘Z)" disabled={!planner.canUndo} onclick={() => planner.undo()}><Icon name="undo" /></button>
+    <button type="button" class="tool-icon" aria-label="Redo" title="Redo (⇧⌘Z)" disabled={!planner.canRedo} onclick={() => planner.redo()}><Icon name="redo" /></button>
+  </div>
+  <button type="button" class="tool-round glass" aria-label="Draw on the route" aria-pressed={drawing}
+          title={drawing ? 'Put the pen away (Esc)' : canDraw ? 'Draw on the route' : 'Plan a route to draw on it'}
+          disabled={!canDraw && !drawing} onclick={toggleDrawing}>
+    <Icon name="pen" />
+  </button>
+</div>
+
+{#if drawing}
+  <PenBar status={planner.penStatus} zoneSelected={planner.selectedZone !== null} canUndo={planner.canUndo} touch={touchScreen}
+          onundo={() => planner.undo()} onremove={() => planner.removeSelectedZone()} ondone={toggleDrawing} />
+{/if}
+
+<MapControls {choice} onchange={changeMap} location={geolocation.status} {locating} onlocate={locate} />
 
 {#if droppingFile}
   <div class="drop-hint" aria-hidden="true"><span class="glass">Drop a GPX file to open it</span></div>

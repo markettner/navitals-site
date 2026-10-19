@@ -17,6 +17,21 @@ export interface Place extends Coordinate {
   kind: 'street' | 'address' | 'other';
 }
 
+/** The rider's own position as a stop: the app's `RouteStop.currentLocationName`. */
+export const myLocationName = 'My Location';
+
+/** What a rider might type for "My Location": the app's name, the usual others, and German, since a
+ *  German rider types it that way whatever the page's language. */
+const myLocationWords = ['my location', 'current location', 'current position', 'location', 'position', 'standort', 'mein standort', 'aktuelle position', 'aktueller standort'];
+
+/** Whether a stop field's text still asks for "My Location": nothing typed yet, or the start of one
+ *  of its names (two letters at least, so "l" doesn't put it over every search). */
+export function matchesMyLocation(text: string): boolean {
+  const typed = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!typed) return true;
+  return typed.length >= 2 && myLocationWords.some((word) => word.startsWith(typed));
+}
+
 export class SearchUnavailable extends Error {}
 
 export class BadStatus extends Error {

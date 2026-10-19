@@ -2,7 +2,8 @@
   // What the route comes to: distance, climbing and time, or why there is none.
   import type { RouteState } from '../lib/planner.svelte';
 
-  let { route }: { route: RouteState } = $props();
+  /** `locating`: the plan waits for the rider's location before it can be routed. */
+  let { route, locating = false }: { route: RouteState; locating?: boolean } = $props();
 
   const numbers = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 1 });
   const whole = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
@@ -34,7 +35,7 @@
     {#if route.status === 'planning'}<p class="summary-status">Planning…</p>{/if}
   {:else if route.status === 'planning'}
     <p class="summary-status">Planning…</p>
-  {:else}
-    <p class="summary-message">Choose a start and a destination, or right-click the map.</p>
+  {:else if locating}
+    <p class="summary-status">Finding your location…</p>
   {/if}
 </div>

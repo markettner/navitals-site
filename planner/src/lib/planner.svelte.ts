@@ -3,11 +3,13 @@
 // request still on its way, and can be undone.
 
 import { BRouterClient } from '../core/brouterClient';
-import type { Track } from '../core/brouter';
-import { climbing, distance, length, type Coordinate } from '../core/geodesy';
+import type { AvoidArea, Track } from '../core/brouter';
+import { climbing, distance, length, project, type Coordinate } from '../core/geodesy';
+import { avoidZone, failure, planEdit, summary } from '../core/penEdit';
+import { contains, cumulativeDistances, interpret } from '../core/penStroke';
 import { isLoop, sportOf, stopsOf, thinned, type GPXTrack, type NamedPoint } from '../core/gpxReader';
 import { sports, type Sport, type Waypoint } from '../core/route';
-import { PlaceSearch, SearchUnavailable, type Place } from '../core/search';
+import { myLocationName, PlaceSearch, SearchUnavailable, type Place } from '../core/search';
 import type { PlanState } from '../core/urlState';
 
 export interface Stop {
@@ -15,6 +17,9 @@ export interface Stop {
   /** Null for a field not filled in yet. */
   place: Place | null;
   kind: 'stop' | 'shaping';
+  /** "My Location": the rider's position when the stop was filled in. Its place stays null until
+   *  there is a fix, and then doesn't follow the rider: a plan doesn't change as they move. */
+  current: boolean;
 }
 
 export type RouteState =
@@ -32,9 +37,28 @@ export interface LineRoute {
   places: Place[];
 }
 
+/** An area drawn with the pen to stay out of: its outline, and the circles that tell BRouter so. */
+export interface Zone {
+  id: number;
+  outline: Coordinate[];
+  circles: AvoidArea[];
+}
+
+/** What the pen is doing, or what its last stroke did. */
+export type PenStatus = { kind: 'planning' } | { kind: 'applied'; text: string } | { kind: 'failed'; text: string };
+
+/** How far from the line a stop may be and still be on it, for an edit to drop it (the app's
+ *  `stopOnRouteTolerance`). */
+const stopOnRoute = 400;
+
 let nextID = 1;
-export function newStop(place: Place | null = null, kind: Stop['kind'] = 'stop'): Stop {
-  return { id: nextID++, place, kind };
+export function newStop(place: Place | null = null, kind: Stop['kind'] = 'stop', current = false): Stop {
+  return { id: nextID++, place, kind, current };
+}
+
+/** The place "My Location" stands for, at a fix. */
+export function myLocation(point: Coordinate): Place {
+  return { id: 'current-location', name: myLocationName, subtitle: '', latitude: point.latitude, longitude: point.longitude, kind: 'other' };
 }
 
 /** A place for a point on the map, named by its coordinates until search knows better. */
@@ -76,10 +100,19 @@ function storedSport(): Sport {
   return 'cycling';
 }
 
+/** What the planner needs of the rider's location: `locate` starts finding it, and says whether it
+ *  can be found at all. Fixes come back through `positionArrived`, and a refusal through
+ *  `locationFailed`. */
+export interface Locator {
+  locate: () => 'locating' | 'blocked' | 'unavailable';
+}
+
 interface Snapshot {
   stops: Stop[];
   sport: Sport;
   line: LineRoute | null;
+  avoid: AvoidArea[];
+  zones: Zone[];
 }
 
 export class Planner {
@@ -90,6 +123,18 @@ export class Planner {
   line = $state.raw<LineRoute | null>(null);
   /** Why the last file couldn't be imported, until the next one is. */
   importMessage = $state('');
+  /** Why My Location couldn't be the start, until the plan next changes. */
+  locationMessage = $state('');
+  /** The rider's last known position, for stops that are "My Location". */
+  private position: Coordinate | null = null;
+  /** Circles every route stays out of: what the pen erased, blocked or fenced off. */
+  avoid = $state.raw<AvoidArea[]>([]);
+  /** The areas drawn round, for the map. Their circles are in `avoid`. */
+  zones = $state.raw<Zone[]>([]);
+  penStatus = $state.raw<PenStatus | null>(null);
+  /** The zone clicked with the pen out, offered for removal. */
+  selectedZone = $state<number | null>(null);
+  private penRequest: AbortController | null = null;
 
   private past = $state.raw<Snapshot[]>([]);
   private future = $state.raw<Snapshot[]>([]);
@@ -106,7 +151,20 @@ export class Planner {
   /** The bends still waiting for their names, one lookup a second. */
   private naming: AbortController | null = null;
 
+  constructor(private readonly locator: Locator = { locate: () => 'unavailable' }) {}
+
   get canUndo(): boolean { return this.past.length > 0; }
+
+  /** Nothing chosen yet: the card shows one search field, for where to go. */
+  get isEmpty(): boolean {
+    return !this.line && this.stops.every((stop) => !stop.place && !stop.current);
+  }
+
+  /** A stop is "My Location" and the rider hasn't been found yet. */
+  get waitingForLocation(): boolean {
+    return this.stops.some((stop) => stop.current && !stop.place);
+  }
+
   get canRedo(): boolean { return this.future.length > 0; }
 
   /** The stops and shaping points that are filled in, as BRouter is asked for them. */
@@ -147,19 +205,29 @@ export class Planner {
   // ---------- Undo ----------
 
   private snapshot(): Snapshot {
-    return { stops: this.stops.map((stop) => ({ ...stop, place: stop.place && { ...stop.place } })), sport: this.sport, line: this.line };
+    return {
+      stops: this.stops.map((stop) => ({ ...stop, place: stop.place && { ...stop.place } })),
+      sport: this.sport, line: this.line, avoid: this.avoid, zones: this.zones,
+    };
   }
 
   /** Keeps the plan as it is now, so the change about to be made can be undone. */
-  private record(): void {
-    this.past = [...this.past.slice(-99), this.snapshot()];
+  private record(snapshot = this.snapshot()): void {
+    this.past = [...this.past.slice(-99), snapshot];
     this.future = [];
+    this.locationMessage = '';
   }
 
   private restore(snapshot: Snapshot): void {
+    this.penRequest?.abort();
+    this.penStatus = null;
+    this.selectedZone = null;
     this.stops = snapshot.stops;
+    this.fillMyLocation();
     this.sport = snapshot.sport;
     this.line = snapshot.line;
+    this.avoid = snapshot.avoid;
+    this.zones = snapshot.zones;
     if (snapshot.line) this.showLine(snapshot.line);
     else this.plan();
   }
@@ -187,7 +255,60 @@ export class Planner {
     if (!stop) return;
     this.record();
     stop.place = place;
+    stop.current = false;
     this.plan();
+  }
+
+  /** The first pick in an empty plan: where to go, from where the rider is, as the app plans a
+   *  place it was shown. Without their location the start is left to choose. */
+  chooseDestination(place: Place): void {
+    this.record();
+    const located = this.locator.locate();
+    this.stops = [newStop(null, 'stop', located === 'locating'), newStop(place)];
+    if (located === 'blocked') this.locationMessage = locationRefused;
+    this.fillMyLocation();
+    this.plan();
+  }
+
+  /** A stop made "My Location", from its field's suggestions. */
+  useMyLocation(id: number): void {
+    const stop = this.stops.find((s) => s.id === id);
+    if (!stop || this.locator.locate() !== 'locating') return;
+    this.record();
+    stop.current = true;
+    stop.kind = 'stop';
+    stop.place = null;
+    this.fillMyLocation();
+    this.plan();
+  }
+
+  /** A fix: stops waiting for the rider's location take it, and the route is planned. A plan made
+   *  already stays as it is: the planner isn't navigation. */
+  positionArrived(point: Coordinate): void {
+    this.position = { latitude: point.latitude, longitude: point.longitude };
+    if (this.fillMyLocation()) this.plan();
+  }
+
+  /** The rider's location can't be had: stops waiting for it become fields to fill in. */
+  locationFailed(): void {
+    const waiting = this.stops.filter((stop) => stop.current && !stop.place);
+    if (!waiting.length) return;
+    for (const stop of waiting) stop.current = false;
+    this.locationMessage = locationRefused;
+  }
+
+  /** Gives the stops waiting for "My Location" the last fix, if there is one; true if any took it. */
+  private fillMyLocation(): boolean {
+    const position = this.position;
+    if (!position) return false;
+    let filled = false;
+    for (const stop of this.stops) {
+      if (stop.current && !stop.place) {
+        stop.place = myLocation(position);
+        filled = true;
+      }
+    }
+    return filled;
   }
 
   /** A point from the map: the start, a stop before the destination, or the destination. Its name
@@ -200,9 +321,16 @@ export class Planner {
       stop = newStop(droppedPin(point));
       this.stops.splice(Math.max(this.stops.length - 1, 1), 0, stop);
     } else {
+      // The destination of an empty plan is gone to from where the rider is, as from search.
+      const fromHere = role === 'end' && this.isEmpty && this.locator.locate() === 'locating';
       stop = role === 'start' ? this.stops[0] : this.stops.at(-1)!;
       stop.place = droppedPin(point);
       stop.kind = 'stop';
+      stop.current = false;
+      if (fromHere) {
+        this.stops[0].current = true;
+        this.fillMyLocation();
+      }
     }
     this.plan();
     this.name(stop.id, point);
@@ -227,6 +355,7 @@ export class Planner {
     if (!stop) return;
     this.record();
     stop.place = droppedPin(point, stop.kind);
+    stop.current = false;
     this.plan();
     this.name(id, point);
   }
@@ -251,6 +380,7 @@ export class Planner {
     this.record();
     if (this.stops.filter((stop) => stop.kind === 'stop').length <= 2 && this.stops[index].kind === 'stop') {
       this.stops[index].place = null;
+      this.stops[index].current = false;
     } else {
       this.stops.splice(index, 1);
       // A bend can't be an end: if one is left there, it becomes the stop.
@@ -398,6 +528,105 @@ export class Planner {
     this.route = { ...route, track: route.tracks[index], selected: index };
   }
 
+  // ---------- The pen ----------
+
+  /** A finished stroke over the route, drawn at `metresPerPoint` (`PenStroke.interpret`): ride
+   *  another way, erase a section, mark a spot blocked, or fence an area off. The edit replaces only
+   *  the part of the route it touches, and from then on the route is its line, as in the app. */
+  async draw(stroke: Coordinate[], metresPerPoint: number): Promise<void> {
+    const route = this.route;
+    if (route.status !== 'ready' || this.penStatus?.kind === 'planning') return;
+    const track = route.track;
+    const edit = interpret(stroke, track.coordinates, metresPerPoint);
+    if (!edit) {
+      this.penStatus = { kind: 'failed', text: 'Start and end on the route, scribble along it, or draw across it.' };
+      return;
+    }
+    const before = this.snapshot();
+    const request = new AbortController();
+    this.penRequest = request;
+    this.selectedZone = null;
+    this.penStatus = { kind: 'planning' };
+    const router = (waypoints: Waypoint[], avoid: AvoidArea[], signal?: AbortSignal) =>
+      this.client.route(waypoints, this.sport, { avoid, signal });
+    const stillCurrent = () => this.penRequest === request && this.route.status === 'ready' && this.route.track === track;
+    try {
+      if (edit.kind === 'avoidZone') {
+        const result = await avoidZone(edit.polygon, track, this.avoid, router, request.signal);
+        if (!stillCurrent()) return;
+        this.record(before);
+        this.zones = [...this.zones, { id: nextID++, outline: edit.polygon, circles: result.circles }];
+        this.avoid = [...this.avoid, ...result.circles];
+        if (!result.passes) {
+          this.penStatus = { kind: 'applied', text: "No-go zone added. The route doesn't pass it." };
+          return;
+        }
+        this.followLine(result.track, null, edit.polygon);
+        this.penStatus = { kind: 'applied', text: summary(edit, result.track.length - track.length) };
+        return;
+      }
+      const result = await planEdit(edit, stroke, track, this.avoid, router, request.signal);
+      if (!stillCurrent()) return;
+      this.record(before);
+      this.avoid = [...this.avoid, ...result.avoid];
+      this.followLine(result.track, result.removed, null);
+      this.penStatus = { kind: 'applied', text: summary(edit, result.track.length - track.length) };
+    } catch {
+      if (request.signal.aborted || this.penRequest !== request) return;
+      this.penStatus = { kind: 'failed', text: failure(edit) };
+    } finally {
+      if (this.penRequest === request) this.penRequest = null;
+    }
+  }
+
+  /** The route becomes `track`, kept as it is from now on. The ends stay; the stops and places
+   *  between them become places it passes, except those on a part no longer ridden (`removed`, in
+   *  metres along the old line) or inside a zone drawn round (`fenced`). */
+  private followLine(track: Track, removed: [number, number] | null, fenced: Coordinate[] | null): void {
+    const old = this.route.status === 'ready' ? this.route.track.coordinates : [];
+    const name = this.title;
+    const passed = this.line ? this.line.places
+      : this.stops.slice(1, -1).filter((stop) => stop.kind === 'stop' && stop.place).map((stop) => stop.place!);
+    const cumulative = cumulativeDistances(old);
+    const kept = passed.filter((place) => {
+      if (fenced) return !contains(fenced, place);
+      if (!removed) return true;
+      const projection = project(old, place);
+      if (!projection || projection.distance > stopOnRoute) return true;
+      const next = Math.min(projection.segment + 1, old.length - 1);
+      const along = cumulative[projection.segment] + projection.t * (cumulative[next] - cumulative[projection.segment]);
+      return !(removed[0] < along && along < removed[1]);
+    });
+    this.stops = [this.stops[0], this.stops.at(-1)!];
+    this.line = { name, track, places: kept };
+    this.showLine(this.line);
+  }
+
+  /** Takes the zone offered for removal away. The route keeps its way round; the next stroke or
+   *  plan may use the area. */
+  removeSelectedZone(): void {
+    const zone = this.zones.find((z) => z.id === this.selectedZone);
+    if (!zone) return;
+    this.record();
+    this.zones = this.zones.filter((z) => z !== zone);
+    this.avoid = this.avoid.filter((circle) => !zone.circles.includes(circle));
+    this.selectedZone = null;
+    this.penStatus = { kind: 'applied', text: 'No-go zone removed. The route keeps its way round; draw to change it.' };
+  }
+
+  /** A click with the pen out: the zone under it, if any, is offered for removal. */
+  penClicked(point: Coordinate): void {
+    this.selectedZone = [...this.zones].reverse().find((zone) => contains(zone.outline, point))?.id ?? null;
+  }
+
+  /** The pen put away: an edit still planning is dropped. */
+  endDrawing(): void {
+    this.penRequest?.abort();
+    this.penRequest = null;
+    this.penStatus = null;
+    this.selectedZone = null;
+  }
+
   // ---------- Routing ----------
 
   /** Plans the route through the points that are filled in, once there are two. */
@@ -407,6 +636,9 @@ export class Planner {
     if (waypoints.length < 2) {
       this.request = null;
       this.route = { status: 'idle' };
+      // Nothing to keep out of without a route: a new one starts clean.
+      this.avoid = [];
+      this.zones = [];
       return;
     }
     const request = new AbortController();
@@ -414,12 +646,13 @@ export class Planner {
     const previous = this.route.status === 'ready' ? this.route.track
       : this.route.status === 'planning' ? this.route.previous : null;
     this.route = { status: 'planning', previous };
-    this.client.route(waypoints, this.sport, { signal: request.signal }).then(
+    const avoid = this.avoid;
+    this.client.route(waypoints, this.sport, { avoid, signal: request.signal }).then(
       (track) => {
         if (this.request !== request) return;
         this.route = { status: 'ready', track, tracks: [track], selected: 0, waypoints };
         // A route through shaping points is one the rider drew; there is nothing else to offer.
-        if (!waypoints.some((w) => w.kind === 'shaping')) this.findAlternatives(request, waypoints);
+        if (!waypoints.some((w) => w.kind === 'shaping')) this.findAlternatives(request, waypoints, avoid);
       },
       (error: unknown) => {
         if (this.request !== request || request.signal.aborted) return;
@@ -431,7 +664,7 @@ export class Planner {
   /** The alternatives, once the plan has rested, one after another, best first. A failed one only
    *  ends the search for more; one that repeats a route already found (BRouter's answer when it
    *  has nothing different) is left out. A new plan cancels the lot. */
-  private findAlternatives(request: AbortController, waypoints: Waypoint[]): void {
+  private findAlternatives(request: AbortController, waypoints: Waypoint[], avoid: AvoidArea[]): void {
     const signal = request.signal;
     const rested = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(resolve, alternativesDelay);
@@ -440,7 +673,7 @@ export class Planner {
     (async () => {
       await rested;
       for (let alternative = 1; alternative <= alternatives; alternative++) {
-        const track = await this.client.route(waypoints, this.sport, { alternative, signal });
+        const track = await this.client.route(waypoints, this.sport, { alternative, avoid, signal });
         const route = this.route;
         if (this.request !== request || route.status !== 'ready') return;
         if (route.tracks.some((known) => Math.abs(known.length - track.length) < 1 && known.coordinates.length === track.coordinates.length)) continue;
@@ -463,6 +696,8 @@ export class Planner {
     stop.place = { ...place, latitude: point.latitude, longitude: point.longitude };
   }
 }
+
+const locationRefused = 'Allow location access to plan from your location, or choose a start.';
 
 function messageFor(error: unknown): string {
   if (error instanceof TypeError) return "Can't reach brouter.de. Check the connection and try again.";

@@ -18,8 +18,7 @@
   }
 </script>
 
-<details class="map-settings">
-  <summary>Map</summary>
+<div class="map-settings">
   <div class="field">
     <span class="field-label">Appearance</span>
     <Pills label="Appearance" options={appearances} value={choice.appearance} onchoose={(id) => choose('appearance', id)} />
@@ -34,4 +33,4 @@
     <Pills label="Dark map" options={darkStyles} value={choice.dark} onchoose={(id) => choose('dark', id)} />
     <p class="note">{darkStyles.find((s) => s.id === choice.dark)?.note}</p>
   </div>
-</details>
+</div>

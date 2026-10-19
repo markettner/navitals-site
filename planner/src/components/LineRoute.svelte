@@ -1,5 +1,6 @@
 <script lang="ts">
-  // An imported recording kept as it is: its ends, the places it passes, and the way to change it.
+  // A route kept as its line: an imported recording, or one the pen changed. Its ends, the places it
+  // passes, and the ways to change it.
   // The app treats such a route the same way ("routes that follow their line"): planning it again
   // through its ends would throw the line away, so only making it editable does.
   import type { Planner } from '../lib/planner.svelte';
@@ -19,8 +20,9 @@
     <li class="stop-row line-row"><span class="stop-icon end" aria-hidden="true"></span><span>{finish?.name}</span></li>
   </ol>
   <p class="note">
-    This route follows the line in the file, exactly. To change it, make it editable: shaping points
-    are laid along it and BRouter plans it through them, so it then keeps to BRouter's roads and paths.
+    This route follows its line exactly: from a file, or as the pen
+    left it. Draw on it to change part of it, or make it editable: shaping points are laid along it
+    and BRouter plans it through them, so it then keeps to BRouter's roads and paths.
   </p>
   <button type="button" class="text-button" onclick={() => planner.makeEditable()}>Make editable</button>
 </div>

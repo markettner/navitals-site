@@ -2,15 +2,21 @@
   // Start, stops and destination, as the app's planner lists them, with the shaping points a drag
   // left between them in grey. Drag a stop by its handle to reorder, ⇅ to reverse, ✕ to take a
   // stop or bend out.
+  //
+  // An empty plan is one field, as the app starts: what is picked there is where to go, and the
+  // start is the rider's location. The list, Add Stop and ⇅ come with the destination.
   import type { Coordinate } from '../core/geodesy';
   import type { Planner } from '../lib/planner.svelte';
+  import Icon from './Icon.svelte';
   import StopField from './StopField.svelte';
 
   interface Props {
     planner: Planner;
     bias: () => Coordinate;
+    /** Whether stop fields offer "My Location": the browser can locate, or it is blocked here. */
+    myLocation: 'offer' | 'blocked' | null;
   }
-  let { planner, bias }: Props = $props();
+  let { planner, bias, myLocation }: Props = $props();
 
   let dragging = $state<number | null>(null);
   let over = $state<number | null>(null);
@@ -72,6 +78,21 @@
   }
 </script>
 
+{#if planner.isEmpty}
+<div class="stops">
+  <div class="stop-row">
+    <span class="stop-icon end" aria-hidden="true"></span>
+    <StopField
+      place={null}
+      placeholder="Search for a place"
+      search={planner.search}
+      {bias}
+      onchoose={(place) => planner.chooseDestination(place)}
+      onclear={() => {}}
+    />
+  </div>
+</div>
+{:else}
 <div class="stops">
   <ol class="stop-list">
     {#each rows as row (row.type === 'fold' ? `fold-${planner.stops[row.index].id}` : planner.stops[row.index].id)}
@@ -104,17 +125,21 @@
             class="stop-icon"
             class:start={index === 0}
             class:end={index === planner.stops.length - 1}
+            class:current={stop.current}
             aria-hidden="true"
-          >{index > 0 && index < planner.stops.length - 1 ? stopNumber(index) : ''}</span>
+          >{#if stop.current}<Icon name="navigation" size={11} />{:else if index > 0 && index < planner.stops.length - 1}{stopNumber(index)}{/if}</span>
           <StopField
             place={stop.place}
+            current={stop.current}
             placeholder={label(index)}
             search={planner.search}
             {bias}
+            {myLocation}
             onchoose={(place) => planner.setPlace(stop.id, place)}
             onclear={() => planner.setPlace(stop.id, null)}
+            onmylocation={() => planner.useMyLocation(stop.id)}
           />
-          {#if stopCount > 2 || stop.place}
+          {#if stopCount > 2 || stop.place || stop.current}
             <button type="button" class="icon-button" aria-label={`Remove ${label(index).toLowerCase()}`}
                     onclick={() => planner.remove(stop.id)}>✕</button>
           {/if}
@@ -138,4 +163,6 @@
     <button type="button" class="icon-button" aria-label="Reverse the route" title="Reverse"
             disabled={planner.waypoints.length < 2} onclick={() => planner.reverse()}>⇅</button>
   </div>
+  {#if planner.locationMessage}<p class="note" role="status">{planner.locationMessage}</p>{/if}
 </div>
+{/if}

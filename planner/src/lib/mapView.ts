@@ -6,6 +6,11 @@
 // the route is drawn dashed and straight through the pointer, and BRouter is asked once, on drop:
 // never for a preview, since every pause in a drag would be a request to a donated server. Touch
 // pans the map, as in the app; markers can still be dragged with a finger.
+//
+// With the pen out (the app's PenCanvas), a left-drag or one finger draws instead, and the stroke
+// is handed over in map coordinates when it ends. Space held, the wheel, and two fingers still move
+// the map. MapLibre listens on its canvas container, so the pen takes its presses one level up, in
+// the capture phase, before MapLibre sees them.
 
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -13,10 +18,10 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 // keeps; so Vite bundles the worker itself and hands MapLibre the address.
 import workerURL from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import type { FeatureCollection } from 'geojson';
-import { insertionIndex, prefix, project, stopPositions, suffix, type Coordinate } from '../core/geodesy';
+import { distance, insertionIndex, prefix, project, stopPositions, suffix, type Coordinate } from '../core/geodesy';
 import { labelAnchors } from '../core/labels';
 import { darkStyles, styleURL } from '../mapStyles';
-import type { Stop } from './planner.svelte';
+import type { Stop, Zone } from './planner.svelte';
 
 maplibregl.setWorkerUrl(workerURL);
 
@@ -28,8 +33,16 @@ const alternativesSource = 'planner-alternatives';
 const previewSource = 'planner-preview';
 const ghostSource = 'planner-ghost';
 const positionSource = 'planner-position';
+const locationSource = 'planner-location';
+const zonesSource = 'planner-zones';
 /** The app's accent, which is the planned route's colour there. */
 const routeColor = '#E03A3E';
+/** The rider's dot: the system's blue, as MapLibre's own control and the app draw it. */
+const locationColor = '#1A84FF';
+/** The pen's ink: the app's orange, apart from the route's red. */
+const penColor = '#FF9500';
+/** A stroke keeps a point only this many pixels from the last (`PenCanvas`'s 4 pt). */
+const penSpacing = 4;
 /** How near the line, in pixels, a press has to start to take it; and how near a marker to take
  *  that instead (`MapPointerController.lineReach`, `pointReach`). */
 const lineReach = 12;
@@ -50,6 +63,10 @@ export interface MapEvents {
   chooseRoute: (index: number) => void;
   /** The line was dragged out into a bend, which goes before the waypoint at `before`. */
   insertShaping: (at: Coordinate, before: number) => void;
+  /** A stroke drawn with the pen, and how many metres a pixel was while it was drawn. */
+  penStroke: (stroke: Coordinate[], metresPerPoint: number) => void;
+  /** A click with the pen out, without drawing. */
+  penClick: (at: Coordinate) => void;
   /** The map moved, so a menu over it is no longer where it pointed. */
   moved: () => void;
 }
@@ -81,6 +98,16 @@ export class MapView {
   /** When a menu last opened, so a long press doesn't open a second one where the browser (Android)
    *  sent its own `contextmenu` for the same press. */
   private menuOpenedAt = 0;
+  private location: (Coordinate & { accuracy: number }) | null = null;
+  private zones: Zone[] = [];
+  private selectedZone: number | null = null;
+  /** The pen is out. */
+  private drawing = false;
+  /** Space is held with the pen out: a drag moves the map instead. */
+  private spaceHeld = false;
+  /** The stroke on screen: its points while it is drawn, its coordinates once it is handed over. */
+  private stroke: { pixels: { x: number; y: number }[]; coordinates: Coordinate[] | null } | null = null;
+  private readonly strokeLayer: SVGPolylineElement;
 
   constructor(container: HTMLElement, style: string, private readonly events: MapEvents) {
     this.shownStyle = style;
@@ -94,7 +121,6 @@ export class MapView {
       attributionControl: false,
     });
     this.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-    this.map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: false } }), 'top-right');
     this.map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
     // OpenFreeMap's TileJSON brings OpenMapTiles and OpenStreetMap, the hillshade source names
     // Mapzen and AWS, BRouter routes. The Natural Earth relief at low zooms names nobody.
@@ -120,12 +146,56 @@ export class MapView {
     this.map.on('mouseup', (event) => this.pointerUp(event));
     this.map.on('click', (event) => this.clicked(event));
     this.map.getCanvasContainer().addEventListener('mouseleave', () => { if (!this.pulling) this.setGhost(null); });
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('pen-stroke');
+    this.strokeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    this.strokeLayer.setAttribute('stroke', penColor);
+    svg.append(this.strokeLayer);
+    container.append(svg);
+    this.watchPen();
+    // A stroke handed over stays on the map while its edit is planned, wherever the map goes.
+    this.map.on('move', () => {
+      if (!this.stroke?.coordinates) return;
+      this.stroke.pixels = this.stroke.coordinates.map((c) => this.map.project([c.longitude, c.latitude]));
+      this.drawStroke();
+    });
   }
 
   setStyle(style: string): void {
     if (style === this.shownStyle) return;
     this.shownStyle = style;
     this.map.setStyle(styleURL(style));
+  }
+
+  /** The pen out or away. While it is out the line can't be pulled and markers stay put. */
+  setDrawing(drawing: boolean): void {
+    if (drawing === this.drawing) return;
+    this.drawing = drawing;
+    this.spaceHeld = false;
+    this.setGhost(null);
+    this.clearStroke();
+    this.map.getContainer().classList.toggle('drawing', drawing);
+  }
+
+  /** Takes the last stroke off the map, once its edit is done. */
+  clearStroke(): void {
+    this.stroke = null;
+    this.drawStroke();
+  }
+
+  /** The areas drawn round, the one offered for removal stronger. */
+  showZones(zones: Zone[], selected: number | null): void {
+    this.zones = zones;
+    this.selectedZone = selected;
+    this.setData(zonesSource, this.zonesFeature());
+  }
+
+  private zonesFeature(): FeatureCollection {
+    return { type: 'FeatureCollection', features: this.zones.map((zone) => ({
+      type: 'Feature' as const, properties: { selected: zone.id === this.selectedZone ? 1 : 0 },
+      geometry: { type: 'Polygon' as const, coordinates: [[...zone.outline, zone.outline[0]].map((p) => [p.longitude, p.latitude])] },
+    })) };
   }
 
   /** Whether the route can be reshaped: not a line kept as recorded. */
@@ -150,6 +220,16 @@ export class MapView {
     map.addSource(previewSource, { type: 'geojson', data: empty });
     map.addSource(ghostSource, { type: 'geojson', data: empty });
     map.addSource(positionSource, { type: 'geojson', data: empty });
+    map.addSource(zonesSource, { type: 'geojson', data: this.zonesFeature() });
+    // No-go zones under every route, as the app draws them: a red wash and a dashed edge.
+    map.addLayer({
+      id: 'planner-zones-fill', type: 'fill', source: zonesSource,
+      paint: { 'fill-color': routeColor, 'fill-opacity': ['case', ['==', ['get', 'selected'], 1], 0.35, 0.18] },
+    }, before);
+    map.addLayer({
+      id: 'planner-zones-line', type: 'line', source: zonesSource,
+      paint: { 'line-color': routeColor, 'line-width': 2, 'line-dasharray': [2, 1.5] },
+    }, before);
     // The routes not chosen, in grey under the chosen one, as the app draws them.
     map.addLayer({
       id: 'planner-alternatives-casing', type: 'line', source: alternativesSource,
@@ -183,6 +263,37 @@ export class MapView {
         paint: { 'circle-radius': 6, 'circle-color': '#FFFFFF', 'circle-stroke-color': routeColor, 'circle-stroke-width': 3 },
       });
     }
+    // Where the rider is, and how sure the browser is of it: a circle of that many metres.
+    map.addSource(locationSource, { type: 'geojson', data: this.location ? pointFeature(this.location, { accuracy: this.location.accuracy }) : empty });
+    map.addLayer({
+      id: 'planner-location-accuracy', type: 'circle', source: locationSource,
+      paint: {
+        'circle-radius': accuracyRadius(this.location?.latitude ?? 0),
+        'circle-color': locationColor, 'circle-opacity': 0.12,
+        'circle-stroke-color': locationColor, 'circle-stroke-opacity': 0.3, 'circle-stroke-width': 1,
+      },
+    });
+    map.addLayer({
+      id: 'planner-location', type: 'circle', source: locationSource,
+      paint: { 'circle-radius': 7, 'circle-color': locationColor, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 },
+    });
+  }
+
+  /** The rider's dot and its accuracy, or none. */
+  showLocation(fix: (Coordinate & { accuracy: number }) | null): void {
+    const latitudeChanged = Boolean(fix && Math.abs((this.location?.latitude ?? 1000) - fix.latitude) > 0.5);
+    this.location = fix;
+    // The accuracy circle's scale depends on the latitude, which an expression can't read; it is
+    // set again when the dot moves far enough north or south to matter.
+    if (latitudeChanged && this.map.getLayer('planner-location-accuracy')) {
+      this.map.setPaintProperty('planner-location-accuracy', 'circle-radius', accuracyRadius(fix!.latitude));
+    }
+    this.setData(locationSource, fix ? pointFeature(fix, { accuracy: fix.accuracy }) : empty);
+  }
+
+  /** Moves the map to the rider, close enough to see the streets around them. */
+  showAround(point: Coordinate, padding: maplibregl.PaddingOptions): void {
+    this.map.easeTo({ center: [point.longitude, point.latitude], zoom: Math.max(this.map.getZoom(), 14), padding, duration: 800 });
   }
 
   private setData(source: string, data: FeatureCollection): void {
@@ -254,6 +365,7 @@ export class MapView {
   // ---------- Pulling the line into a bend ----------
 
   private pointerMoved(event: maplibregl.MapMouseEvent): void {
+    if (this.drawing) return;
     const at = { latitude: event.lngLat.lat, longitude: event.lngLat.lng };
     if (this.pulling) {
       this.pulling.at = at;
@@ -283,7 +395,7 @@ export class MapView {
   }
 
   private pointerDown(event: maplibregl.MapMouseEvent): void {
-    if (event.originalEvent.button !== 0 || !this.grabbable || !this.editable) return;
+    if (event.originalEvent.button !== 0 || !this.grabbable || !this.editable || this.drawing) return;
     // Taking the line, not panning the map.
     event.preventDefault();
     const positions = stopPositions(this.placed.map((p) => p.point), this.line);
@@ -306,6 +418,122 @@ export class MapView {
       return;
     }
     this.events.insertShaping({ latitude: event.lngLat.lat, longitude: event.lngLat.lng }, pulling.before);
+  }
+
+  // ---------- The pen ----------
+
+  private watchPen(): void {
+    const container = this.map.getContainer();
+    const point = (clientX: number, clientY: number) => {
+      const box = container.getBoundingClientRect();
+      return { x: clientX - box.left, y: clientY - box.top };
+    };
+    // MapLibre's own buttons (zoom, compass, attribution) are pressed, not drawn on.
+    const onControl = (target: EventTarget | null) => (target as HTMLElement | null)?.closest('.maplibregl-control-container') != null;
+    let pressed = false;
+
+    container.addEventListener('mousedown', (event) => {
+      if (!this.drawing || this.spaceHeld || event.button !== 0 || onControl(event.target)) return;
+      event.stopPropagation();
+      event.preventDefault();
+      pressed = true;
+      this.beginStroke(point(event.clientX, event.clientY));
+    }, { capture: true });
+    window.addEventListener('mousemove', (event) => {
+      if (pressed) this.extendStroke(point(event.clientX, event.clientY));
+    });
+    window.addEventListener('mouseup', () => {
+      if (!pressed) return;
+      pressed = false;
+      this.endStroke();
+    });
+
+    // One finger draws; a second one turns it into a gesture on the map, which MapLibre takes.
+    container.addEventListener('touchstart', (event) => {
+      if (!this.drawing || onControl(event.target)) return;
+      if (event.touches.length === 1) {
+        event.stopPropagation();
+        pressed = true;
+        const touch = event.touches[0];
+        this.beginStroke(point(touch.clientX, touch.clientY));
+      } else if (pressed) {
+        pressed = false;
+        this.clearStroke();
+      }
+    }, { capture: true, passive: true });
+    container.addEventListener('touchmove', (event) => {
+      if (!pressed) return;
+      event.stopPropagation();
+      event.preventDefault();
+      const touch = event.touches[0];
+      this.extendStroke(point(touch.clientX, touch.clientY));
+    }, { capture: true, passive: false });
+    const touchEnded = (event: TouchEvent) => {
+      if (!pressed || event.touches.length > 0) return;
+      event.stopPropagation();
+      pressed = false;
+      this.endStroke();
+    };
+    container.addEventListener('touchend', touchEnded, { capture: true });
+    container.addEventListener('touchcancel', () => { pressed = false; this.clearStroke(); }, { capture: true });
+
+    // Space moves the map, as in drawing apps; typing a space in a field is only typing.
+    window.addEventListener('keydown', (event) => {
+      if (!this.drawing || event.key !== ' ') return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, button, [contenteditable]')) return;
+      event.preventDefault();
+      if (!this.spaceHeld) container.classList.add('panning');
+      this.spaceHeld = true;
+    });
+    window.addEventListener('keyup', (event) => {
+      if (event.key !== ' ' || !this.spaceHeld) return;
+      this.spaceHeld = false;
+      container.classList.remove('panning');
+    });
+  }
+
+  private beginStroke(at: { x: number; y: number }): void {
+    this.stroke = { pixels: [at], coordinates: null };
+    this.drawStroke();
+  }
+
+  private extendStroke(at: { x: number; y: number }): void {
+    const pixels = this.stroke?.pixels;
+    if (!pixels || this.stroke!.coordinates) return;
+    const last = pixels.at(-1)!;
+    if (Math.hypot(at.x - last.x, at.y - last.y) < penSpacing) return;
+    pixels.push(at);
+    this.drawStroke();
+  }
+
+  private endStroke(): void {
+    const stroke = this.stroke;
+    if (!stroke || stroke.coordinates) return;
+    const coordinates = stroke.pixels.map(({ x, y }) => {
+      const at = this.map.unproject([x, y]);
+      return { latitude: at.lat, longitude: at.lng };
+    });
+    // A click, not a stroke: about what is under it.
+    if (stroke.pixels.length < 2) {
+      this.clearStroke();
+      this.events.penClick(coordinates[0]);
+      return;
+    }
+    stroke.coordinates = coordinates;
+    this.events.penStroke(coordinates, this.metresPerPoint());
+  }
+
+  private drawStroke(): void {
+    this.strokeLayer.setAttribute('points', (this.stroke?.pixels ?? []).map(({ x, y }) => `${x},${y}`).join(' '));
+  }
+
+  /** Metres per pixel across the middle of the map, as the app measures a point. */
+  private metresPerPoint(): number {
+    const bounds = this.map.getBounds();
+    const latitude = this.map.getCenter().lat;
+    const width = this.map.getContainer().clientWidth;
+    const across = distance({ latitude, longitude: bounds.getWest() }, { latitude, longitude: bounds.getEast() });
+    return width > 0 && across > 0 ? across / width : 10;
   }
 
   // ---------- Markers ----------
@@ -433,6 +661,13 @@ export class MapView {
   }
 }
 
+/** A circle's radius in pixels for a feature's `accuracy` in metres, at `latitude`: Web Mercator's
+ *  metres per pixel at zoom 0 there, halved with every zoom level. */
+function accuracyRadius(latitude: number): maplibregl.ExpressionSpecification {
+  const atZero = 156543.03 * Math.cos((latitude * Math.PI) / 180);
+  return ['interpolate', ['exponential', 2], ['zoom'], 0, ['/', ['get', 'accuracy'], atZero], 22, ['/', ['get', 'accuracy'], atZero / 2 ** 22]];
+}
+
 const empty: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 function lineFeature(line: Coordinate[]): FeatureCollection {
@@ -443,8 +678,8 @@ function lineFeature(line: Coordinate[]): FeatureCollection {
   }] };
 }
 
-function pointFeature(point: Coordinate): FeatureCollection {
+function pointFeature(point: Coordinate, properties: Record<string, number> = {}): FeatureCollection {
   return { type: 'FeatureCollection', features: [{
-    type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [point.longitude, point.latitude] },
+    type: 'Feature', properties, geometry: { type: 'Point', coordinates: [point.longitude, point.latitude] },
   }] };
 }

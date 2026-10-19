@@ -6,13 +6,20 @@
 // and the route asked once more. If an upload fails outright, brouter.de's own profile of the same
 // name is used: today our files are brouter.de's copies (checked 2026-10-17, all five identical).
 
-import { BRouterDecodeError, decode, profileFor, routeURL, type Track } from './brouter';
+import { BRouterDecodeError, decode, profileFor, routeURL, type AvoidArea, type Track } from './brouter';
 import { nearSideWaypoints } from './nearSide';
 import type { Sport, Waypoint } from './route';
 
 export const brouterBase = 'https://brouter.de/brouter';
 
 export class RoutingError extends Error {}
+
+export interface RouteRequestOptions {
+  alternative?: number;
+  /** Circles to stay out of. */
+  avoid?: AvoidArea[];
+  signal?: AbortSignal;
+}
 
 export interface BRouterClientOptions {
   base?: string;
@@ -37,7 +44,7 @@ export class BRouterClient {
   /** BRouter's route through the waypoints for a sport. A shaping point dropped on the far side of
    *  a divided road is moved to the near side and the route asked again, once, when the first
    *  answer loops to reach it; the second answer is kept only if it is shorter. As the app does. */
-  async route(waypoints: Waypoint[], sport: Sport, options: { alternative?: number; signal?: AbortSignal } = {}): Promise<Track> {
+  async route(waypoints: Waypoint[], sport: Sport, options: RouteRequestOptions = {}): Promise<Track> {
     const track = await this.answer(waypoints, sport, options);
     const nearSide = nearSideWaypoints(waypoints, track.coordinates);
     if (!nearSide) return track;
@@ -50,8 +57,7 @@ export class BRouterClient {
     }
   }
 
-  private async answer(waypoints: Waypoint[], sport: Sport,
-                       options: { alternative?: number; signal?: AbortSignal }): Promise<Track> {
+  private async answer(waypoints: Waypoint[], sport: Sport, options: RouteRequestOptions): Promise<Track> {
     const profile = profileFor(sport);
     const id = await this.profileID(profile, options.signal);
     let response = await this.get(waypoints, id, options);
@@ -73,9 +79,8 @@ export class BRouterClient {
     }
   }
 
-  private get(waypoints: Waypoint[], profile: string,
-              options: { alternative?: number; signal?: AbortSignal }): Promise<Response> {
-    return this.fetch(routeURL(this.base, waypoints, profile, options.alternative ?? 0), { signal: options.signal });
+  private get(waypoints: Waypoint[], profile: string, options: RouteRequestOptions): Promise<Response> {
+    return this.fetch(routeURL(this.base, waypoints, profile, options.alternative ?? 0, options.avoid), { signal: options.signal });
   }
 
   /** Our profile's id on brouter.de, uploading it if this visit hasn't yet. */

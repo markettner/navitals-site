@@ -46,15 +46,28 @@ export function profileParameters(waypoints: Waypoint[]): Record<string, string>
   return parameters;
 }
 
+/** A circle the route must stay out of: a road drawn blocked, a section erased, or part of an area
+ *  (the app's `AvoidArea`). */
+export interface AvoidArea extends Coordinate {
+  /** Metres. */
+  radius: number;
+}
+
+/** BRouter's `nogos`: `lon,lat,radius` per circle, as `OnDeviceBRouter` hands them to the engine. */
+export function nogos(areas: AvoidArea[]): string {
+  return areas.map((area) => `${area.longitude.toFixed(6)},${area.latitude.toFixed(6)},${Math.round(area.radius)}`).join('|');
+}
+
 /** The GET request for one route: 0 is the best, up to 3 the alternatives BRouter computes on
  *  request, one call each. */
-export function routeURL(base: string, waypoints: Waypoint[], profile: string, alternative = 0): string {
+export function routeURL(base: string, waypoints: Waypoint[], profile: string, alternative = 0, avoid: AvoidArea[] = []): string {
   const query = new URLSearchParams({
     lonlats: lonlats(waypoints),
     profile,
     alternativeidx: String(alternative),
     format: 'geojson',
   });
+  if (avoid.length) query.set('nogos', nogos(avoid));
   for (const [name, value] of Object.entries(profileParameters(waypoints))) {
     query.set(`profile:${name}`, value);
   }
