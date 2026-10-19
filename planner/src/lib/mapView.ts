@@ -130,6 +130,12 @@ export class MapView {
     });
     this.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
     this.map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+    // The privacy policy beside the credits, always shown, as Apple Maps' Legal is. Bottom controls
+    // go in first-added-last, so added before the credits it ends up on their left.
+    const privacy = document.createElement('div');
+    privacy.className = 'maplibregl-ctrl privacy-ctrl';
+    privacy.innerHTML = '<a href="../privacy_policy.html#web-planner">Privacy</a>';
+    this.map.addControl({ onAdd: () => privacy, onRemove: () => privacy.remove() }, 'bottom-right');
     // OpenFreeMap's TileJSON brings OpenMapTiles and OpenStreetMap, the hillshade source names
     // Mapzen and AWS, BRouter routes. The Natural Earth relief at low zooms names nobody.
     this.map.addControl(new maplibregl.AttributionControl({
@@ -139,13 +145,6 @@ export class MapView {
         'Routes <a href="https://brouter.de" target="_blank" rel="noopener">BRouter</a>',
       ],
     }), 'bottom-right');
-    // The privacy policy goes with the small print, as Apple Maps' Legal does, after the credits.
-    // MapLibre sorts its own entries by length and rewrites only its inner text, so the link is
-    // added beside that, where it stays last.
-    const privacy = document.createElement('span');
-    privacy.className = 'attrib-privacy';
-    privacy.innerHTML = ' | <a href="../privacy_policy.html#web-planner">Privacy</a>';
-    container.querySelector('.maplibregl-ctrl-attrib-inner')?.after(privacy);
 
     // A new style starts without our layers, so they go back in each time one loads.
     this.map.on('style.load', () => this.addRouteLayers());
@@ -316,7 +315,7 @@ export class MapView {
       const element = document.createElement('div');
       element.className = 'location-puck';
       element.setAttribute('aria-hidden', 'true');
-      element.innerHTML = `<span class="location-puck-halo"></span><svg viewBox="-13 -13 26 26" width="26" height="26">`
+      element.innerHTML = `<svg viewBox="-13 -13 26 26" width="26" height="26">`
         + `<circle r="12" fill="#FFFFFF"/><circle r="9.8" fill="${locationColor}"/>`
         + `<path d="${heartPath}" fill="#FFFFFF" transform="translate(-5.45 -5.72) scale(0.454)"/></svg>`;
       this.puck = new maplibregl.Marker({ element }).setLngLat([fix.longitude, fix.latitude]).addTo(this.map);
