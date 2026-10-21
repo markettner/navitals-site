@@ -9,6 +9,7 @@ import { avoidZone, failure, planEdit, summary } from '../core/penEdit';
 import { contains, cumulativeDistances, interpret } from '../core/penStroke';
 import { isLoop, sportOf, stopsOf, thinned, unnamed, type GPXTrack, type NamedPoint } from '../core/gpxReader';
 import { sports, type Sport, type Waypoint } from '../core/route';
+import { routeStretches, StretchCache, stretchContext } from '../core/stretches';
 import { myLocationName, PlaceSearch, SearchUnavailable, type Place } from '../core/search';
 import type { PlanState } from '../core/urlState';
 
@@ -152,6 +153,8 @@ export class Planner {
     },
   });
   private request: AbortController | null = null;
+  /** The stretches of the lines planned lately: an edit asks brouter.de only for what it touched. */
+  private readonly stretches = new StretchCache();
   /** The bends still waiting for their names, one lookup a second. */
   private naming: AbortController | null = null;
 
@@ -657,13 +660,17 @@ export class Planner {
     const previous = this.route.status === 'ready' ? this.route.track
       : this.route.status === 'planning' ? this.route.previous : null;
     this.route = { status: 'planning', previous };
-    const avoid = this.avoid;
-    this.client.route(waypoints, this.sport, { avoid, signal: request.signal }).then(
+    const avoid = this.avoid, sport = this.sport;
+    // A route through shaping points is one the rider drew; there is nothing else to offer. As it
+    // is one route, only the stretches the last edit touched are asked for (plan Phase 7k). A plan
+    // that will have alternatives is asked for whole, as each alternative is.
+    const shaped = waypoints.some((w) => w.kind === 'shaping');
+    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, signal: request.signal });
+    (shaped ? routeStretches(waypoints, this.stretches, stretchContext(sport, avoid), route) : route(waypoints)).then(
       (track) => {
         if (this.request !== request) return;
         this.route = { status: 'ready', track, tracks: [track], selected: 0, waypoints };
-        // A route through shaping points is one the rider drew; there is nothing else to offer.
-        if (!waypoints.some((w) => w.kind === 'shaping')) this.findAlternatives(request, waypoints, avoid);
+        if (!shaped) this.findAlternatives(request, waypoints, avoid);
       },
       (error: unknown) => {
         if (this.request !== request || request.signal.aborted) return;

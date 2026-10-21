@@ -9,3 +9,4 @@ and the BRouter profiles; a difference after a sync is a change to the contract.
 | `navitals-route.gpx`, `line-route.gpx`, `garmin-trip.gpx`, `plain-route.gpx` | `NavitalsKit/Tests/NavitalsKitTests/Fixtures/route-gpx/` (the examples of `docs/ROUTE_GPX.md`) |
 | `brouter-far-side-via.json` | `NavitalsKit/Tests/NavitalsKitTests/Fixtures/` (An der Wuhlheide, a shaping point on the far carriageway) |
 | `brouter-route1-timode3.geojson` | `NavitalsKit/Tests/NavitalsKitTests/Fixtures/` (a BRouter 1.7.10 answer) |
+| `brouter-mauerweg-replan.json` | `NavitalsKit/Tests/NavitalsKitTests/Fixtures/` (points 28–36 of the Berliner Mauerweg before and after moving one, and the windows routed again) |

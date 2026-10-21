@@ -10,5 +10,5 @@ python3 "$app/tools/styles/build_styles.py" --web-out "$here/public/styles" >/de
 cp "$app"/Navitals/Resources/BRouter/*.brf "$here/public/profiles/"
 fixtures="$app/NavitalsKit/Tests/NavitalsKitTests/Fixtures"
 cp "$fixtures"/route-gpx/*.gpx "$fixtures/brouter-far-side-via.json" "$fixtures/brouter-route1-timode3.geojson" \
-  "$here/test/fixtures/"
+  "$fixtures/brouter-mauerweg-replan.json" "$here/test/fixtures/"
 echo "synced from $app"
