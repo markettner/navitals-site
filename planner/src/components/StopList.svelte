@@ -6,6 +6,7 @@
   // An empty plan is one field, as the app starts: what is picked there is where to go, and the
   // start is the rider's location. The list, Add Stop and ⇅ come with the destination.
   import type { Coordinate } from '../core/geodesy';
+  import { stopRows } from '../core/stopRows';
   import type { Planner } from '../lib/planner.svelte';
   import Icon from './Icon.svelte';
   import StopField from './StopField.svelte';
@@ -23,35 +24,15 @@
 
   const stopCount = $derived(planner.stops.filter((stop) => stop.kind === 'stop').length);
 
-  /** A run of more than this many bends in a row is listed as one row that opens: "Make
-   *  editable" lays up to 80 along a line, and eighty grey rows would bury the stops. */
-  const foldAfter = 3;
   /** The runs opened, by their first bend. */
   let opened = $state<Set<number>>(new Set());
 
-  type Row = { type: 'point'; index: number } | { type: 'fold'; index: number; count: number; open: boolean };
-  const rows = $derived.by(() => {
-    const result: Row[] = [];
-    const stops = planner.stops;
-    for (let index = 0; index < stops.length; index++) {
-      if (stops[index].kind !== 'shaping') {
-        result.push({ type: 'point', index });
-        continue;
-      }
-      let end = index;
-      while (end + 1 < stops.length && stops[end + 1].kind === 'shaping') end++;
-      const count = end - index + 1;
-      if (count > foldAfter) {
-        const open = opened.has(stops[index].id);
-        result.push({ type: 'fold', index, count, open });
-        if (open) for (let i = index; i <= end; i++) result.push({ type: 'point', index: i });
-      } else {
-        for (let i = index; i <= end; i++) result.push({ type: 'point', index: i });
-      }
-      index = end;
-    }
-    return result;
-  });
+  /** Runs of bends fold into one row that opens, by the rule the app shares (core/stopRows):
+   *  "Make editable" lays up to 80 along a line, and eighty grey rows would bury the stops. */
+  const rows = $derived(stopRows(
+    planner.stops.map((stop) => stop.kind === 'shaping'),
+    (index) => opened.has(planner.stops[index].id),
+  ));
 
   function toggle(id: number) {
     const next = new Set(opened);
@@ -125,6 +106,7 @@
             class="stop-icon"
             class:start={index === 0}
             class:end={index === planner.stops.length - 1}
+            class:via={index > 0 && index < planner.stops.length - 1}
             class:current={stop.current}
             aria-hidden="true"
           >{#if stop.current}<Icon name="navigation" size={11} />{:else if index > 0 && index < planner.stops.length - 1}{stopNumber(index)}{/if}</span>

@@ -141,7 +141,9 @@ body {
     display: grid; place-items: center; font-size: 12px; font-weight: 600;
     color: var(--ink); background: var(--chip); border: 2px solid var(--muted);
 }
-.stop-icon.start { border-color: var(--ink); background: var(--selected); }
+/* As on the map: the start a white disc ringed in red, stops red discs with their number. */
+.stop-icon.start { border-color: var(--route); background: #FFFFFF; }
+.stop-icon.via { color: #FFFFFF; border-color: var(--route); background: var(--route); }
 .stop-icon.end { border-color: var(--route); background: var(--route); }
 .stop-icon.shaping { width: 12px; height: 12px; margin: 13px 5px 0; border-width: 2px; border-color: var(--route); background: var(--selected); }
 .stop-icon.place { width: 12px; height: 12px; margin: 0 5px; border-width: 2px; }
@@ -341,12 +343,15 @@ body {
 
 /* ---------- On the map ---------- */
 .stop-marker { cursor: grab; }
+/* The start: a white disc ringed in the route's red. */
 .stop-marker-shape {
     width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
-    font: 600 12px 'Fredoka', sans-serif; color: #13230C; background: #FFFFFF;
-    border: 3px solid #13230C; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    font: 600 12px 'Fredoka', sans-serif; color: #FFFFFF; background: #FFFFFF;
+    border: 3px solid var(--route); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
-/* A bend: small, so it doesn't read as somewhere the route goes to. */
+/* A stop: filled red with its number, as the app draws it, so it is never taken for a bend. */
+.stop-marker-via { background: var(--route); border: 2.5px solid #FFFFFF; }
+/* A bend: small and hollow, so it doesn't read as somewhere the route goes to. */
 .stop-marker-shaping { width: 14px; height: 14px; border: 3px solid var(--route); }
 /* A pin whose point is the place: a rounded square standing on its corner. */
 .stop-marker-end {

@@ -101,6 +101,14 @@ describe('GPX import', () => {
     expect(track.plannedPoints).toBeNull();
   });
 
+  test("the file's own name wins over its track's, and an author's name is not it", () => {
+    const trk = '<trk><name>Track 1</name><trkseg><trkpt lat="52.51" lon="13.37"/><trkpt lat="52.52" lon="13.38"/></trkseg></trk>';
+    const named = parseGPX(gpx(`<metadata><author><name>A. Rider</name></author><name>Berliner Mauerweg</name></metadata>${trk}`));
+    expect(named.name).toBe('Berliner Mauerweg');
+    const authored = parseGPX(gpx(`<metadata><author><name>A. Rider</name></author></metadata>${trk}`));
+    expect(authored.name).toBe('Track 1');
+  });
+
   test('names come through entities and CDATA', () => {
     const track = parseGPX(gpx(`<wpt lat="52.5" lon="13.4"><name><![CDATA[Café & Co]]></name></wpt>
       <trk><name>Tom &amp; Jerry&#39;s</name><trkseg><trkpt lat="52.51" lon="13.37"/><trkpt lat="52.52" lon="13.38"/></trkseg></trk>`));

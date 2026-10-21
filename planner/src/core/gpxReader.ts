@@ -45,6 +45,8 @@ export const mostMarkedPoints = 200;
 export const loopTolerance = 100;
 /** A waypoint further than this from the line is somewhere bookmarked, not somewhere the route goes. */
 export const stopTolerance = 200;
+/** The name of a file that gives none. */
+export const unnamed = 'Imported route';
 
 interface Point extends Coordinate {
   elevation?: number;
@@ -57,12 +59,16 @@ export function parseGPX(text: string): GPXTrack {
   const routePoints: Point[] = [];
   const waypoints: NamedPoint[] = [];
   let name: string | undefined;
+  /** `metadata/name`: the file's name for what it holds, where our writers put the route's name. */
+  let metadataName: string | undefined;
   let profile: string | null = null;
   let sawGPX = false;
 
   let context: 'none' | 'track' | 'trackPoint' | 'routePoint' | 'waypoint' = 'none';
   let wantsName = false;
   let inMetadata = false;
+  /** How deep inside `metadata`: its own `<name>` is at 1, an author's (`author/name`) deeper. */
+  let metadataDepth = 0;
   let pending: Point | null = null;
   let pendingName: string | undefined;
   let textBuffer = '';
@@ -76,12 +82,13 @@ export function parseGPX(text: string): GPXTrack {
     const local = token.name.split(':').pop()!;
     if (token.type === 'open') {
       textBuffer = '';
+      if (inMetadata) metadataDepth++;
       switch (token.name) {
         case 'gpx': sawGPX = true; break;
         case 'trk': context = 'track'; wantsName = name === undefined; break;
         case 'trkseg': segments.push([]); break;
         case 'rte': wantsName = name === undefined; break;
-        case 'metadata': inMetadata = true; break;
+        case 'metadata': inMetadata = true; metadataDepth = 0; break;
         case 'trkpt': case 'rtept': case 'wpt': {
           const latitude = Number(token.attributes.lat), longitude = Number(token.attributes.lon);
           if (token.attributes.lat === undefined || token.attributes.lon === undefined
@@ -102,9 +109,12 @@ export function parseGPX(text: string): GPXTrack {
     // A closing tag, or an element that opened and closed at once.
     const value = textBuffer.trim();
     textBuffer = '';
+    const depth = metadataDepth;
+    if (inMetadata && token.name !== 'metadata') metadataDepth--;
     switch (token.name) {
       case 'name':
         if (context === 'trackPoint' || context === 'routePoint' || context === 'waypoint') pendingName = value;
+        else if (inMetadata) { if (depth === 1 && value) metadataName = value; }
         else if (wantsName && value) { name = value; wantsName = false; }
         break;
       case 'ele': {
@@ -160,7 +170,8 @@ export function parseGPX(text: string): GPXTrack {
   const last = routePoints.length - 1;
   const elevations = source.map((point) => point.elevation);
   return {
-    name: name ?? 'Imported route',
+    // The file's own name for the route (docs/ROUTE_GPX.md), else its track's or route's.
+    name: metadataName ?? name ?? unnamed,
     coordinates: source.map(({ latitude, longitude }) => ({ latitude, longitude })),
     // Partial elevation is not elevation: if any point lacks it the profile is dropped.
     elevations: elevations.every((e) => e !== undefined) ? (elevations as number[]) : [],

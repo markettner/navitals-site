@@ -7,7 +7,7 @@ import type { AvoidArea, Track } from '../core/brouter';
 import { climbing, distance, length, project, type Coordinate } from '../core/geodesy';
 import { avoidZone, failure, planEdit, summary } from '../core/penEdit';
 import { contains, cumulativeDistances, interpret } from '../core/penStroke';
-import { isLoop, sportOf, stopsOf, thinned, type GPXTrack, type NamedPoint } from '../core/gpxReader';
+import { isLoop, sportOf, stopsOf, thinned, unnamed, type GPXTrack, type NamedPoint } from '../core/gpxReader';
 import { sports, type Sport, type Waypoint } from '../core/route';
 import { myLocationName, PlaceSearch, SearchUnavailable, type Place } from '../core/search';
 import type { PlanState } from '../core/urlState';
@@ -109,6 +109,7 @@ export interface Locator {
 
 interface Snapshot {
   stops: Stop[];
+  planName: string | null;
   sport: Sport;
   line: LineRoute | null;
   avoid: AvoidArea[];
@@ -121,6 +122,9 @@ export class Planner {
   /** Raw: a track is thousands of points, and nothing inside it changes. */
   route = $state.raw<RouteState>({ status: 'idle' });
   line = $state.raw<LineRoute | null>(null);
+  /** The plan's name as it came, when it came with one: a GPX file's, or the line it was made from.
+   *  It stays while the stops are edited, and goes when another plan starts. */
+  planName = $state<string | null>(null);
   /** Why the last file couldn't be imported, until the next one is. */
   importMessage = $state('');
   /** Why My Location couldn't be the start, until the plan next changes. */
@@ -189,10 +193,11 @@ export class Planner {
     return { sport: this.sport, points: points.map(({ latitude, longitude, kind }) => ({ latitude, longitude, kind: kind === 'shaping' ? 'shaping' : 'stop' })) };
   }
 
-  /** The route's name, as the app names a fresh route: for where it goes, and a loop for the place
-   *  it goes round by. An imported line keeps the file's name. */
+  /** The route's name, as the app names a fresh route: the file's it came from, else for where it
+   *  goes, and a loop for the place it goes round by. An imported line keeps the file's name. */
   get title(): string {
     if (this.line) return this.line.name;
+    if (this.planName) return this.planName;
     const placed = this.stops.filter((stop) => stop.place && stop.kind === 'stop').map((stop) => stop.place!);
     if (placed.length < 2) return 'Route';
     const first = placed[0], last = placed.at(-1)!;
@@ -207,7 +212,7 @@ export class Planner {
   private snapshot(): Snapshot {
     return {
       stops: this.stops.map((stop) => ({ ...stop, place: stop.place && { ...stop.place } })),
-      sport: this.sport, line: this.line, avoid: this.avoid, zones: this.zones,
+      planName: this.planName, sport: this.sport, line: this.line, avoid: this.avoid, zones: this.zones,
     };
   }
 
@@ -223,6 +228,7 @@ export class Planner {
     this.penStatus = null;
     this.selectedZone = null;
     this.stops = snapshot.stops;
+    this.planName = snapshot.planName;
     this.fillMyLocation();
     this.sport = snapshot.sport;
     this.line = snapshot.line;
@@ -265,6 +271,7 @@ export class Planner {
     this.record();
     const located = this.locator.locate();
     this.stops = [newStop(null, 'stop', located === 'locating'), newStop(place)];
+    this.planName = null;
     if (located === 'blocked') this.locationMessage = locationRefused;
     this.fillMyLocation();
     this.plan();
@@ -434,6 +441,7 @@ export class Planner {
     this.naming?.abort();
     this.record();
     this.line = null;
+    this.planName = null;
     this.sport = state.sport;
     this.stops = state.points.map((point) => newStop(droppedPin(point, point.kind), point.kind));
     this.plan();
@@ -448,6 +456,8 @@ export class Planner {
     this.importMessage = '';
     const sport = sportOf(track);
     if (sport) this.sport = sport;
+    // A file with no name of its own leaves the plan to be named for where it goes.
+    this.planName = track.name !== unnamed ? track.name : null;
     if (track.plannedPoints) {
       this.line = null;
       this.stops = track.plannedPoints.map((point) => newStop(named(point), point.kind));
@@ -489,6 +499,7 @@ export class Planner {
     const start = this.stops[0], finish = this.stops.at(-1)!;
     const bends = points.slice(1, -1).map((point) => newStop(droppedPin(point, 'shaping'), 'shaping'));
     this.stops = [start, ...bends, finish];
+    this.planName = line.name;
     this.line = null;
     this.plan();
     this.nameSlowly(bends.map((bend) => bend.id));
