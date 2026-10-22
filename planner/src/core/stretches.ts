@@ -188,12 +188,15 @@ export class StretchCache {
 
 /** BRouter's line through the waypoints, asking `route` only for the stretches the cache does not
  *  know: each run of them as one window, one known stretch wider on each side, spliced into the
- *  known line. The first plan, or one where every stretch changed, is one window: the whole plan. */
+ *  known line. The first plan, or one where every stretch changed, is one window: the whole plan.
+ *  More windows than `mostWindows` are asked for as the whole plan, one request instead of many:
+ *  brouter.de counts requests, not kilometres. */
 export async function routeStretches(waypoints: Waypoint[], cache: StretchCache, context: string,
-  route: (waypoints: Waypoint[]) => Promise<Track>): Promise<Track> {
+  route: (waypoints: Waypoint[]) => Promise<Track>, mostWindows = Infinity): Promise<Track> {
   const known = cache.lookUp(stretchKeys(waypoints), context);
   const windows = replanWindows(known.map((track) => track === null));
-  const whole = windows.length === 1 && windows[0][0] === 0 && windows[0][1] === waypoints.length - 1;
+  const whole = windows.length > mostWindows
+    || (windows.length === 1 && windows[0][0] === 0 && windows[0][1] === waypoints.length - 1);
   let track: Track | null = null;
   if (!whole) {
     const routed = await Promise.all(windows.map(async ([first, last]) =>

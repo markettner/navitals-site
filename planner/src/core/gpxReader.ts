@@ -2,8 +2,9 @@
 //
 // The richest information wins: route points marked `trp:ViaPoint` / `trp:ShapingPoint` are a plan,
 // whatever else the file holds; a few unmarked route points far apart and no track are a plan of
-// stops (brouter-web, Kurviger); anything else is a line, with the file's waypoints as places
-// along it. A deliberately small reader: the elements a route needs, and nothing else.
+// stops (brouter-web, Kurviger); anything else is a line, with the file's waypoints near it as
+// stops on it (`stopsOf`), which the planner then fits a plan to (`trackFit.ts`). A deliberately
+// small reader: the elements a route needs, and nothing else.
 
 import { distance, length, project, type Coordinate } from './geodesy';
 import { sportForProfile } from './brouter';
@@ -28,6 +29,9 @@ export interface GPXTrack {
   plannedPoints: PlannedPoint[] | null;
   /** The BRouter profile it says it was planned with (`navitals:profile`). */
   profile: string | null;
+  /** What the track says it is for (`trk/type`): Komoot writes its sport there, as
+   *  `touring_bicycle`, `racebike` or `hike`. */
+  activity: string | null;
 }
 
 export class GPXError extends Error {
@@ -43,8 +47,11 @@ export const sparsestLine = 400;
 export const mostMarkedPoints = 200;
 /** Start and finish closer than this are one place: the track is a loop. */
 export const loopTolerance = 100;
-/** A waypoint further than this from the line is somewhere bookmarked, not somewhere the route goes. */
-export const stopTolerance = 200;
+/** A waypoint further than this from the line is somewhere bookmarked, not somewhere the route goes.
+ *  Closer, it is a stop where the line passes nearest: Komoot puts a lake's highlight on the water
+ *  and a viewpoint up its side path, and a stop out there would send the route to it and back,
+ *  which the file's route never did. */
+export const stopTolerance = 1000;
 /** The name of a file that gives none. */
 export const unnamed = 'Imported route';
 
@@ -62,6 +69,7 @@ export function parseGPX(text: string): GPXTrack {
   /** `metadata/name`: the file's name for what it holds, where our writers put the route's name. */
   let metadataName: string | undefined;
   let profile: string | null = null;
+  let activity: string | null = null;
   let sawGPX = false;
 
   let context: 'none' | 'track' | 'trackPoint' | 'routePoint' | 'waypoint' = 'none';
@@ -140,6 +148,9 @@ export function parseGPX(text: string): GPXTrack {
         pending = null;
         context = 'none';
         break;
+      case 'type':
+        if (context === 'track' && activity === null && value) activity = value;
+        break;
       case 'trk': case 'rte':
         context = 'none';
         wantsName = false;
@@ -185,12 +196,28 @@ export function parseGPX(text: string): GPXTrack {
       };
     }) : null,
     profile,
+    activity,
   };
 }
 
-/** The sport to plan a file's route with, when it names a profile we know. */
-export function sportOf(track: GPXTrack): Sport | undefined {
-  return track.profile ? sportForProfile(track.profile) : undefined;
+/** The sport to plan a file's route with, when it names a profile or an activity we know. Our own
+ *  profile first: it says exactly how the route was planned. */
+export function sportOf(track: Pick<GPXTrack, 'profile' | 'activity'>): Sport | undefined {
+  return (track.profile ? sportForProfile(track.profile) : undefined)
+    ?? (track.activity ? sportForActivity(track.activity) : undefined);
+}
+
+/** Komoot's sports (with their e-bike twins), and the plain words other exporters use
+ *  (`GPXTrack.sport(forActivity:)`). */
+export function sportForActivity(activity: string): Sport | undefined {
+  switch (activity.toLowerCase().replace(/^e_/, '')) {
+    case 'touring_bicycle': case 'citybike': case 'cycling': case 'biking': return 'cycling';
+    case 'racebike': case 'road_cycling': return 'road';
+    case 'mtb_easy': case 'gravel': return 'gravel';
+    case 'mtb': case 'mtb_advanced': return 'mountainBike';
+    case 'hike': case 'hiking': case 'mountaineering': case 'jogging': case 'running': case 'walking': return 'hiking';
+    default: return undefined;
+  }
 }
 
 /** Whether a track ends where it began. */
@@ -199,9 +226,9 @@ export function isLoop(line: Coordinate[]): boolean {
 }
 
 /** The file's waypoints sorted into the stops of a line (`GPXTrack.stops`): one at either end names
- *  that end, the ones near the line between are places in the order the track passes them, and one
- *  nowhere near the line is left out. A file lists its waypoints in any order: Komoot writes the
- *  destination first. */
+ *  that end, the ones near the line between are moved onto it, in the order the track passes them,
+ *  and one nowhere near the line is left out. A file lists its waypoints in any order: Komoot writes
+ *  the destination first. */
 export function stopsOf(track: Pick<GPXTrack, 'coordinates' | 'waypoints'>): { start?: NamedPoint; vias: NamedPoint[]; finish?: NamedPoint } {
   const line = track.coordinates;
   if (line.length === 0) return { vias: [] };
@@ -215,7 +242,9 @@ export function stopsOf(track: Pick<GPXTrack, 'coordinates' | 'waypoints'>): { s
       finish = waypoint;
     } else {
       const projection = project(line, waypoint);
-      if (projection && projection.distance <= stopTolerance) along.push({ position: projection.segment + projection.t, place: waypoint });
+      if (projection && projection.distance <= stopTolerance) {
+        along.push({ position: projection.segment + projection.t, place: { ...waypoint, ...projection.at } });
+      }
     }
   }
   if (isLoop(line)) {

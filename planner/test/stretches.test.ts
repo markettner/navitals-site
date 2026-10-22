@@ -205,6 +205,23 @@ describe('asking brouter.de', () => {
     expect(brouter.asked.every((asked) => asked.length === shaped.length)).toBe(true);
   });
 
+  test('more windows than allowed are one request for the whole plan', async () => {
+    const brouter = router(), cache = new StretchCache(), context = stretchContext('cycling', []);
+    const long = Array.from({ length: 20 }, (_, i) => point(52.5 + i * 0.01, 13.3 + (i % 2) * 0.01, i % 19 ? 'shaping' : 'stop'));
+    await routeStretches(long, cache, context, brouter.route);
+    const moved = long.map((p) => ({ ...p }));
+    moved[3].latitude += 0.003;
+    moved[15].latitude += 0.003;
+    await routeStretches(moved, cache, context, brouter.route);
+    expect(brouter.asked).toHaveLength(3);
+    moved[3].latitude += 0.003;
+    moved[15].latitude += 0.003;
+    const result = await routeStretches(moved, cache, context, brouter.route, 1);
+    expect(brouter.asked).toHaveLength(4);
+    expect(brouter.asked[3]).toEqual(moved);
+    expect(result.coordinates).toEqual((await router().route(moved)).coordinates);
+  });
+
   test('the cache keeps the newest stretches', async () => {
     const cache = new StretchCache(5);
     await routeStretches(shaped, cache, 'x', router().route);

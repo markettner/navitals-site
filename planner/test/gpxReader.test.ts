@@ -5,7 +5,8 @@ import garminTrip from './fixtures/garmin-trip.gpx?raw';
 import lineRoute from './fixtures/line-route.gpx?raw';
 import navitalsRoute from './fixtures/navitals-route.gpx?raw';
 import plainRoute from './fixtures/plain-route.gpx?raw';
-import { GPXError, isLoop, parseGPX, simplify, sportOf, stopsOf, thinned } from '../src/core/gpxReader';
+import { GPXError, isLoop, parseGPX, simplify, sportForActivity, sportOf, stopsOf, thinned } from '../src/core/gpxReader';
+import { distance } from '../src/core/geodesy';
 import { writeRoute } from '../src/core/gpx';
 import type { Coordinate } from '../src/core/geodesy';
 import { sports, type Waypoint } from '../src/core/route';
@@ -116,6 +117,24 @@ describe('GPX import', () => {
     expect(track.waypoints[0].name).toBe('Café & Co');
   });
 
+  test("Komoot's sport in trk/type picks the sport, our own profile wins over it, and a link's type is not it", () => {
+    const file = (extra: string) => gpx(`<metadata>${extra}<author><link href="https://www.komoot.de"><type>text/html</type></link></author></metadata>
+      <trk><name>Loop</name><type>racebike</type><trkseg><trkpt lat="52.5163" lon="13.3777"/><trkpt lat="52.5180" lon="13.3800"/></trkseg></trk>`);
+    const komoot = parseGPX(file(''));
+    expect(komoot.activity).toBe('racebike');
+    expect(sportOf(komoot)).toBe('road');
+    expect(sportOf(parseGPX(file('<extensions><navitals:profile xmlns:navitals="x">gravel</navitals:profile></extensions>')))).toBe('gravel');
+  });
+
+  test("Komoot's sports and their e-bike twins", () => {
+    expect(sportForActivity('touring_bicycle')).toBe('cycling');
+    expect(sportForActivity('e_touring_bicycle')).toBe('cycling');
+    expect(sportForActivity('mtb_easy')).toBe('gravel');
+    expect(sportForActivity('mtb')).toBe('mountainBike');
+    expect(sportForActivity('hike')).toBe('hiking');
+    expect(sportForActivity('sailing')).toBeUndefined();
+  });
+
   test('a file that is not GPX, and a GPX with nothing in it, both say so', () => {
     expect(() => parseGPX('<kml></kml>')).toThrow(new GPXError('notGPX'));
     expect(() => parseGPX(gpx(''))).toThrow(new GPXError('noPoints'));
@@ -160,6 +179,12 @@ describe('thinning and stops of a line', () => {
     expect(stops.vias).toEqual([]);
     expect(stops.start?.name).toBe('Car park');
     expect(stops.finish?.name).toBe('Summit');
+  });
+
+  test('a waypoint beside the track becomes a stop on it, keeping its name; one a kilometre and more away is left out', () => {
+    const { vias } = stopsOf({ coordinates: straight(5000), waypoints: [place('Viewpoint', 2000, 600), place('Too far', 3000, 1100)] });
+    expect(vias.map((p) => p.name)).toEqual(['Viewpoint']);
+    expect(distance(vias[0], at(2000, 0))).toBeLessThan(1);
   });
 
   test('on a loop the turnaround is a stop, and a waypoint at the start names both ends', () => {

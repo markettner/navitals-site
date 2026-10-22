@@ -1,5 +1,5 @@
 // What is being planned: the stops and shaping points, the sport, and the route BRouter made of
-// them, or a line imported as it is. Every change to the plan routes it again, cancelling a
+// them, or a line followed as it is. Every change to the plan routes it again, cancelling a
 // request still on its way, and can be undone.
 
 import { BRouterClient } from '../core/brouterClient';
@@ -10,6 +10,7 @@ import { contains, cumulativeDistances, interpret } from '../core/penStroke';
 import { isLoop, sportOf, stopsOf, thinned, unnamed, type GPXTrack, type NamedPoint } from '../core/gpxReader';
 import { sports, type Sport, type Waypoint } from '../core/route';
 import { routeStretches, StretchCache, stretchContext } from '../core/stretches';
+import { fitTrack } from '../core/trackFit';
 import { myLocationName, PlaceSearch, SearchUnavailable, type Place } from '../core/search';
 import type { PlanState } from '../core/urlState';
 
@@ -30,8 +31,9 @@ export type RouteState =
   | { status: 'ready'; track: Track; tracks: Track[]; selected: number; waypoints: Waypoint[] }
   | { status: 'failed'; message: string };
 
-/** A route that follows its line (an imported recording): the line is the route, its ends are its
- *  stops, and the places it passes are shown but never routed to. Only "Make editable" changes it. */
+/** A route that follows its line (an imported line BRouter can't ride, or what the pen left): the
+ *  line is the route, its ends are its stops, and the places it passes are shown but never routed
+ *  to. Only "Make editable" changes it. */
 export interface LineRoute {
   name: string;
   track: Track;
@@ -85,9 +87,20 @@ export const alternativesDelay = 1500;
  *  Photon at once: about a minute and a half for the most there can be. */
 export const namingSpacing = 1000;
 
-/** How many shaping points "Make editable" lays along a line at most. Enough to keep a recording's
- *  way through a town; BRouter routes each stretch between them on its own. */
+/** How many shaping points "Make editable" lays along a line at most, when BRouter can't be fitted
+ *  to it. Enough to keep a recording's way through a town; BRouter routes each stretch between
+ *  them on its own. */
 export const mostShapingPoints = 80;
+
+/** How many requests brouter.de takes from one address in about a minute before it answers
+ *  "Please, retry later!" (a 403) to every request for the next minute. Measured 2026-10-23: 16 in
+ *  three seconds went through and the 17th was refused; one every three seconds, the 16th was; a
+ *  fit a minute after 14 other requests had its 13th refused. */
+export const brouterRequestsPerMinute = 12;
+/** The most requests fitting a line may make, the profile's upload included. Adding shaping points
+ *  takes 9–10 for the Mauerweg (165 km, 13 stops) and the Königs Wusterhausen loop (60 km, 12
+ *  stops); the rest go to taking out the ones not needed, and a fit out of requests keeps them. */
+export const fitRequests = 12;
 
 const sportKey = 'navitals-planner-sport';
 
@@ -151,8 +164,23 @@ export class Planner {
       if (!response.ok) throw new Error(`No profile ${profile}.`);
       return response.text();
     },
+    fetch: (input, init) => {
+      this.requestsThisMinute();
+      this.requestTimes.push(Date.now());
+      this.requestCount++;
+      return fetch(input, init);
+    },
   });
   private request: AbortController | null = null;
+  /** When each request to brouter.de of the last minute went out, oldest first, and how many have
+   *  gone out in all. */
+  private requestTimes: number[] = [];
+  private requestCount = 0;
+  /** A line being fitted, until the fit is done or the plan changes. */
+  private fitRequest: AbortController | null = null;
+  /** Whether BRouter is being fitted to the line, or couldn't be: it doesn't ride it, or brouter.de
+   *  had taken all the requests it would for the minute. */
+  fitting = $state<'fitting' | 'failed' | 'busy' | null>(null);
   /** The stretches of the lines planned lately: an edit asks brouter.de only for what it touched. */
   private readonly stretches = new StretchCache();
   /** The bends still waiting for their names, one lookup a second. */
@@ -219,14 +247,17 @@ export class Planner {
     };
   }
 
-  /** Keeps the plan as it is now, so the change about to be made can be undone. */
+  /** Keeps the plan as it is now, so the change about to be made can be undone. A line still being
+   *  fitted stays the line it is. */
   private record(snapshot = this.snapshot()): void {
+    this.stopFitting();
     this.past = [...this.past.slice(-99), snapshot];
     this.future = [];
     this.locationMessage = '';
   }
 
   private restore(snapshot: Snapshot): void {
+    this.stopFitting();
     this.penRequest?.abort();
     this.penStatus = null;
     this.selectedZone = null;
@@ -452,7 +483,9 @@ export class Planner {
   }
 
   /** A GPX file, by docs/ROUTE_GPX.md: a plan is planned again through its points, for its sport
-   *  when it names one; anything else is a line, kept exactly as it is. */
+   *  when it names one. Anything else is a line: shown as it is at once, and then fitted into a plan
+   *  of stops and shaping points that BRouter rides along it. A line BRouter can't ride stays the
+   *  line, its waypoints places along it. */
   import(track: GPXTrack): void {
     this.naming?.abort();
     this.record();
@@ -467,7 +500,8 @@ export class Planner {
       this.plan();
       return;
     }
-    // A line: the ends are named by the file's own waypoints there, else by search.
+    // A line: the ends are named by the file's own waypoints there, else by search, and the
+    // waypoints near it are stops where it passes them.
     const ends = stopsOf(track);
     const first = track.coordinates[0], last = track.coordinates.at(-1)!;
     const start = newStop(ends.start ? named(ends.start) : droppedPin(first));
@@ -490,13 +524,17 @@ export class Planner {
       if (isLoop(track.coordinates) && ends.start) finish.place = { ...start.place! };
       else this.name(finish.id, last);
     }
+    void this.fit(this.line);
   }
 
-  /** A line made into a plan: shaping points laid along it, and the route planned through them.
-   *  The line then snaps to BRouter's ways, which is the price of being able to change it. */
-  makeEditable(): void {
+  /** A line made into a plan, as an import does: fitted when BRouter will ride it, else with
+   *  shaping points laid along it and the route planned through them. The line then snaps to
+   *  BRouter's ways, which is the price of being able to change it. */
+  async makeEditable(): Promise<void> {
     const line = this.line;
-    if (!line) return;
+    if (!line || this.fitting === 'fitting') return;
+    if (this.fitting !== 'failed' && (await this.fit(line) || this.fitting === 'busy')) return;
+    if (this.line !== line) return;
     this.record();
     const points = thinned(line.track.coordinates, mostShapingPoints, 10);
     const start = this.stops[0], finish = this.stops.at(-1)!;
@@ -506,6 +544,77 @@ export class Planner {
     this.line = null;
     this.plan();
     this.nameSlowly(bends.map((bend) => bend.id));
+  }
+
+  /** The line made a plan of its ends, its places as stops, and the shaping points that make
+   *  BRouter ride it (`fitTrack`), asking brouter.de at most `fitRequests` times and not past its
+   *  minute's worth. True once the plan replaces the line; false when BRouter can't ride the line,
+   *  brouter.de doesn't answer or is busy, or the plan changed meanwhile. The plan is the import's
+   *  own step: undo goes back to before the file. */
+  private async fit(line: LineRoute): Promise<boolean> {
+    this.stopFitting();
+    const request = new AbortController();
+    this.fitRequest = request;
+    this.fitting = 'fitting';
+    const sport = this.sport, avoid = this.avoid;
+    const context = stretchContext(sport, avoid);
+    const ends = [this.stops[0].place, this.stops.at(-1)!.place];
+    const stops: Waypoint[] = [ends[0] ?? line.track.coordinates[0], ...line.places, ends[1] ?? line.track.coordinates.at(-1)!]
+      .map(({ latitude, longitude }) => ({ latitude, longitude, kind: 'stop' }));
+    const before = this.requestCount;
+    // A routing is a request (two when it moves a shaping point to the near side of a road, which
+    // is rare: once in the Mauerweg's fit).
+    const mayRoute = (routings: number) => this.requestCount - before + routings <= fitRequests
+      && this.requestsThisMinute() + routings <= brouterRequestsPerMinute;
+    let refused = false;
+    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, signal: request.signal })
+      .catch((error: unknown) => {
+        if (error instanceof Error && /retry later/i.test(error.message)) refused = true;
+        throw error;
+      });
+    try {
+      // One request a round, the whole plan when more than one stretch changed: brouter.de counts
+      // requests. Every stretch is then known, so planning the fit asks for nothing more.
+      const fit = await fitTrack(line.track.coordinates, stops,
+        async (points) => (await routeStretches(points, this.stretches, context, route, 1)).coordinates,
+        { mayRoute, signal: request.signal, trace: import.meta.env.DEV ? (text) => console.debug(`fit: ${text}`) : undefined });
+      if (this.fitRequest !== request) return false;
+      if (!fit) {
+        this.fitting = refused ? 'busy' : 'failed';
+        return false;
+      }
+      const places = [...line.places];
+      const middle = fit.waypoints.slice(1, -1).map((waypoint) => waypoint.kind === 'stop' && places.length
+        ? newStop(places.shift()!)
+        : newStop(droppedPin(waypoint, 'shaping'), 'shaping'));
+      this.fitting = null;
+      this.fitRequest = null;
+      this.stops = [this.stops[0], ...middle, this.stops.at(-1)!];
+      this.planName = line.name !== unnamed ? line.name : null;
+      this.line = null;
+      // The bends keep "Shaping point", as in the app: looked up one a second, the 30 to 50 of a
+      // fit had Photon closing the connection, and the ends went unnamed.
+      this.plan();
+      return true;
+    } catch {
+      if (this.fitRequest === request) this.fitting = refused ? 'busy' : 'failed';
+      return false;
+    } finally {
+      if (this.fitRequest === request) this.fitRequest = null;
+    }
+  }
+
+  /** How many requests went to brouter.de in the last minute. */
+  private requestsThisMinute(): number {
+    const minute = Date.now() - 60_000;
+    while (this.requestTimes.length && this.requestTimes[0] < minute) this.requestTimes.shift();
+    return this.requestTimes.length;
+  }
+
+  private stopFitting(): void {
+    this.fitRequest?.abort();
+    this.fitRequest = null;
+    this.fitting = null;
   }
 
   /** Names many bends one after another, `namingSpacing` apart, in the background. Bends removed
@@ -722,6 +831,8 @@ function messageFor(error: unknown): string {
   if (error instanceof Error && error.message) {
     // BRouter's own words for a point off its map.
     if (/not mapped/.test(error.message)) return 'A stop is too far from any road or path BRouter knows.';
+    // brouter.de's, after more requests in a minute than it takes.
+    if (/retry later/i.test(error.message)) return 'brouter.de is busy with this planner. Try again in a minute.';
     return error.message;
   }
   return 'No route was found.';
