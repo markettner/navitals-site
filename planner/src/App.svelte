@@ -331,6 +331,10 @@
 
   <div class="card-section">
     <Pills label="Sport" options={sports} value={planner.sport} onchoose={(sport) => planner.chooseSport(sport)} />
+  </div>
+
+  <!-- Only the stops scroll: the header, the sport and the route's numbers stay put however long the plan. -->
+  <div class="card-section card-scroll">
     {#if planner.line}
       <LineRoute {planner} />
     {:else}
