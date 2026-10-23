@@ -25,7 +25,16 @@ describe('route GPX', () => {
     expect(writeRoute('Alexanderplatz to Müggelsee', 'gravel', sampleLine, sampleWaypoints)).toBe(navitalsRoute);
   });
 
-  test("a route that follows its line is written exactly as the contract's example, with no rte", () => {
+  // GPX can't say a `rte` and a `trk` are one route, so Komoot and Preview offered a file with both
+  // as two. The plan rides in the track instead.
+  test('a planned route is one track, with no rte beside it', () => {
+    const gpx = writeRoute('Alexanderplatz to Müggelsee', 'gravel', sampleLine, sampleWaypoints);
+    expect(gpx).not.toContain('<rte>');
+    expect(gpx.split('<trk>')).toHaveLength(2);
+    expect(gpx).toContain('<navitals:plan>');
+  });
+
+  test("a route that follows its line is written exactly as the contract's example, with no plan", () => {
     const waypoints: Waypoint[] = [
       { latitude: 52.44, longitude: 13.63, name: 'Rahnsdorf', kind: 'stop' },
       { latitude: 52.44, longitude: 13.645, name: 'Strandbad', kind: 'place' },
@@ -36,12 +45,13 @@ describe('route GPX', () => {
     const gpx = writeRoute('Müggelsee shore', 'cycling', line, waypoints, true);
     expect(gpx).toBe(lineRoute);
     expect(gpx).not.toContain('<rte>');
+    expect(gpx).not.toContain('navitals:plan');
   });
 
   test('the ends are via points even when a caller calls them shaping points', () => {
     const gpx = writeRoute('Ends', 'road', sampleLine, sampleWaypoints.map((w) => ({ ...w, kind: 'shaping' as const })));
-    const marks = [...gpx.matchAll(/<trp:(\w+)\/>/g)].map((m) => m[1]);
-    expect(marks).toEqual(['ViaPoint', 'ShapingPoint', 'ShapingPoint', 'ShapingPoint', 'ViaPoint']);
+    const kinds = [...gpx.matchAll(/kind="(\w+)"/g)].map((m) => m[1]);
+    expect(kinds).toEqual(['via', 'shaping', 'shaping', 'shaping', 'via']);
   });
 
   test('a name with XML in it does not produce a broken file', () => {

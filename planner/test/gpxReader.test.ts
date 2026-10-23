@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 import garminTrip from './fixtures/garmin-trip.gpx?raw';
 import lineRoute from './fixtures/line-route.gpx?raw';
 import navitalsRoute from './fixtures/navitals-route.gpx?raw';
+import navitalsRouteRte from './fixtures/navitals-route-rte.gpx?raw';
 import plainRoute from './fixtures/plain-route.gpx?raw';
 import { GPXError, isLoop, parseGPX, simplify, sportForActivity, sportOf, stopsOf, thinned } from '../src/core/gpxReader';
 import { distance } from '../src/core/geodesy';
@@ -18,6 +19,26 @@ ${body}
 </gpx>`;
 
 describe('the route GPX contract, reading', () => {
+  test('a file of ours from before the plan moved into the track still opens as its plan', () => {
+    const track = parseGPX(navitalsRouteRte);
+    expect(track.plannedPoints?.map((p) => p.kind)).toEqual(['stop', 'shaping', 'stop', 'shaping', 'stop']);
+    expect(track.plannedPoints?.map((p) => p.name)).toEqual(['Alexanderplatz', 'Puschkinallee', 'Treptower Park', 'An der Wuhlheide', 'Müggelsee']);
+    expect(sportOf(track)).toBe('gravel');
+    expect(track.coordinates).toHaveLength(7);
+  });
+
+  test('names with XML in them come back as they were', () => {
+    const name = `Tom & Jerry's <"ride">`;
+    const waypoints: Waypoint[] = [
+      { latitude: 52.51, longitude: 13.37, name: 'Start', kind: 'stop' },
+      { latitude: 52.515, longitude: 13.375, name, kind: 'shaping' },
+      { latitude: 52.52, longitude: 13.38, name: 'End', kind: 'stop' },
+    ];
+    const track = parseGPX(writeRoute(name, 'cycling', waypoints, waypoints));
+    expect(track.name).toBe(name);
+    expect(track.plannedPoints?.[1].name).toBe(name);
+  });
+
   test('our own file comes back as its stops and shaping points, with its sport', () => {
     const track = parseGPX(navitalsRoute);
     expect(track.plannedPoints?.map((p) => p.kind)).toEqual(['stop', 'shaping', 'stop', 'shaping', 'stop']);

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The route of navitals-route.gpx as Navitals wrote it until 2026-10-23: the plan as a rte of
+     its own, marked with Garmin's TripExtensions, beside the track. Files like this are out there
+     and still open as the plan they were. -->
+<gpx version="1.1" creator="Navitals" xmlns="http://www.topografix.com/GPX/1/1"
+     xmlns:trp="http://www.garmin.com/xmlschemas/TripExtensions/v1"
+     xmlns:navitals="https://navitals.kettner.berlin/xmlschemas/gpx/1">
+  <metadata>
+    <name>Alexanderplatz to Müggelsee</name>
+    <extensions><navitals:profile>gravel</navitals:profile></extensions>
+  </metadata>
+  <wpt lat="52.5219184" lon="13.4132147"><name>Alexanderplatz</name></wpt>
+  <wpt lat="52.4880000" lon="13.4720000"><name>Treptower Park</name></wpt>
+  <wpt lat="52.4400000" lon="13.6450000"><name>Müggelsee</name></wpt>
+  <rte>
+    <name>Alexanderplatz to Müggelsee</name>
+    <rtept lat="52.5219184" lon="13.4132147"><name>Alexanderplatz</name><extensions><trp:ViaPoint/></extensions></rtept>
+    <rtept lat="52.4930000" lon="13.4590000"><name>Puschkinallee</name><extensions><trp:ShapingPoint/></extensions></rtept>
+    <rtept lat="52.4880000" lon="13.4720000"><name>Treptower Park</name><extensions><trp:ViaPoint/></extensions></rtept>
+    <rtept lat="52.4600000" lon="13.5300000"><name>An der Wuhlheide</name><extensions><trp:ShapingPoint/></extensions></rtept>
+    <rtept lat="52.4400000" lon="13.6450000"><name>Müggelsee</name><extensions><trp:ViaPoint/></extensions></rtept>
+  </rte>
+  <trk>
+    <name>Alexanderplatz to Müggelsee</name>
+    <type>gravel</type>
+    <trkseg>
+      <trkpt lat="52.5219184" lon="13.4132147"/>
+      <trkpt lat="52.5050000" lon="13.4400000"/>
+      <trkpt lat="52.4930000" lon="13.4590000"/>
+      <trkpt lat="52.4880000" lon="13.4720000"/>
+      <trkpt lat="52.4600000" lon="13.5300000"/>
+      <trkpt lat="52.4500000" lon="13.5900000"/>
+      <trkpt lat="52.4400000" lon="13.6450000"/>
+    </trkseg>
+  </trk>
+</gpx>

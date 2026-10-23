@@ -1,7 +1,8 @@
 // Reading a GPX file, as the app does (NavitalsKit's GPXParser and GPXTrack; docs/ROUTE_GPX.md).
 //
-// The richest information wins: route points marked `trp:ViaPoint` / `trp:ShapingPoint` are a plan,
-// whatever else the file holds; a few unmarked route points far apart and no track are a plan of
+// The richest information wins: the track's `navitals:plan`, or else route points marked
+// `trp:ViaPoint` / `trp:ShapingPoint` (a Garmin, a file of ours from before the plan moved into the
+// track), are a plan, whatever else the file holds; a few unmarked route points far apart and no track are a plan of
 // stops (brouter-web, Kurviger); anything else is a line, with the file's waypoints near it as
 // stops on it (`stopsOf`), which the planner then fits a plan to (`trackFit.ts`). A deliberately
 // small reader: the elements a route needs, and nothing else.
@@ -63,7 +64,9 @@ interface Point extends Coordinate {
 
 export function parseGPX(text: string): GPXTrack {
   const segments: Point[][] = [];
-  const routePoints: Point[] = [];
+  const filePoints: Point[] = [];
+  /** The points of the track's `navitals:plan`, each with its kind; the first plan only. */
+  const planPoints: Point[] = [];
   const waypoints: NamedPoint[] = [];
   let name: string | undefined;
   /** `metadata/name`: the file's name for what it holds, where our writers put the route's name. */
@@ -77,6 +80,7 @@ export function parseGPX(text: string): GPXTrack {
   let inMetadata = false;
   /** How deep inside `metadata`: its own `<name>` is at 1, an author's (`author/name`) deeper. */
   let metadataDepth = 0;
+  let inPlan = false;
   let pending: Point | null = null;
   let pendingName: string | undefined;
   let textBuffer = '';
@@ -110,6 +114,13 @@ export function parseGPX(text: string): GPXTrack {
           if (context === 'routePoint' && pending) {
             if (local === 'ViaPoint') pending.kind = 'stop';
             else if (local === 'ShapingPoint') pending.kind = 'shaping';
+          } else if (context === 'track' && local === 'plan') {
+            inPlan = planPoints.length === 0;
+          } else if (context === 'track' && local === 'point' && inPlan) {
+            const { lat, lon, kind, name: pointName } = token.attributes;
+            const latitude = Number(lat), longitude = Number(lon);
+            if (lat === undefined || lon === undefined || !Number.isFinite(latitude) || !Number.isFinite(longitude)) break;
+            planPoints.push({ latitude, longitude, name: pointName || undefined, kind: kind === 'shaping' ? 'shaping' : 'stop' });
           }
       }
       if (!token.selfClosing) continue;
@@ -139,7 +150,7 @@ export function parseGPX(text: string): GPXTrack {
         context = 'track';
         break;
       case 'rtept':
-        if (pending) routePoints.push({ ...pending, name: pendingName });
+        if (pending) filePoints.push({ ...pending, name: pendingName });
         pending = null;
         context = 'none';
         break;
@@ -160,13 +171,17 @@ export function parseGPX(text: string): GPXTrack {
         break;
       default:
         if (inMetadata && local === 'profile' && value) profile = value;
+        if (local === 'plan') inPlan = false;
     }
   }
   if (!sawGPX) throw new GPXError('notGPX');
 
   // A recorded track is the most faithful thing in the file; a planned route is next best.
   const recorded = segments.filter((segment) => segment.length > 0);
-  const source = recorded.length ? recorded.flat() : routePoints;
+  const source = recorded.length ? recorded.flat() : filePoints;
+  // Our own plan, in the track, else the route points: a Garmin trip, brouter-web, or a file of
+  // ours written before the plan moved out of its `rte`.
+  const routePoints = planPoints.length >= 2 ? planPoints : filePoints;
   if (source.length < 2) throw new GPXError('noPoints');
 
   let isPlan: boolean;
