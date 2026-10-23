@@ -24,6 +24,7 @@
     --red-ui: #E02B26;
     --accent: #E02B26;
     --kicker: #C4221C;
+    --title-red: #EA3B32;      /* "Route Planner" beside the logo: matches its brighter red */
     --ink: #13230C;
     --text-2: #33422A;
     --muted: #4A5A40;
@@ -46,6 +47,7 @@
         --ground: #0E1A10;
         --accent: #FF4A40;
         --kicker: #FF7A72;
+        --title-red: #FF7A72;
         --ink: #F4F8F1;
         --text-2: #C3CEBC;
         --muted: #9FB096;
@@ -105,9 +107,10 @@ body {
 }
 
 .card-head { display: flex; align-items: center; gap: 12px; }
-.card-head .kicker { flex: 1; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: 20px; }
-.brand img { width: 36px; height: 36px; border-radius: 9px; box-shadow: 0 3px 10px rgba(20, 52, 0, 0.25); }
+.card-head .kicker { flex: 1; color: var(--title-red); }
+/* logo.svg is the icon and the wordmark together, kerned and spaced in the artwork. */
+.brand { display: flex; align-items: center; text-decoration: none; }
+.brand img { display: block; width: auto; height: 36px; }
 .kicker { color: var(--kicker); font-weight: 600; font-size: 14px; letter-spacing: 0.02em; }
 
 .card-section { margin-top: 18px; display: grid; gap: 14px; }

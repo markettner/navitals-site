@@ -22,7 +22,7 @@
   import RouteSummary from './components/RouteSummary.svelte';
   import StopList from './components/StopList.svelte';
 
-  let { icon }: { icon: string } = $props();
+  let { logo }: { logo: string } = $props();
 
   const geolocation = new LocationService();
   const planner = new Planner({
@@ -323,8 +323,7 @@
           onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); collapsed = !collapsed; } }}></button>
   <header class="card-head">
     <a class="brand" href="../">
-      <img src={icon} alt="" width="36" height="36">
-      <span>Navitals</span>
+      <img src={logo} alt="Navitals" width="148" height="36">
     </a>
     <span class="kicker">Route Planner</span>
   </header>
