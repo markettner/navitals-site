@@ -8,7 +8,7 @@ import { climbing, distance, length, project, type Coordinate } from '../core/ge
 import { avoidZone, failure, planEdit, summary } from '../core/penEdit';
 import { contains, cumulativeDistances, interpret } from '../core/penStroke';
 import { isLoop, sportOf, stopsOf, thinned, unnamed, type GPXTrack, type NamedPoint } from '../core/gpxReader';
-import { sports, type Sport, type Waypoint } from '../core/route';
+import { sports, type Sport, type Way, type Waypoint } from '../core/route';
 import { routeStretches, StretchCache, stretchContext } from '../core/stretches';
 import { fitTrack } from '../core/trackFit';
 import { myLocationName, PlaceSearch, SearchUnavailable, type Place } from '../core/search';
@@ -127,6 +127,7 @@ interface Snapshot {
   sport: Sport;
   line: LineRoute | null;
   avoid: AvoidArea[];
+  without: Way[];
   zones: Zone[];
 }
 
@@ -139,6 +140,10 @@ export class Planner {
   /** The plan's name as it came, when it came with one: a GPX file's, or the line it was made from.
    *  It stays while the stops are edited, and goes when another plan starts. */
   planName = $state<string | null>(null);
+  /** The route a link chose among those offered, until it is found or the plan changes. */
+  private wantedAlternative = $state(0);
+  /** The route the link that opened the plan chose, marked "From link" until the plan changes. */
+  linkedRoute = $state<number | null>(null);
   /** Why the last file couldn't be imported, until the next one is. */
   importMessage = $state('');
   /** Why My Location couldn't be the start, until the plan next changes. */
@@ -147,6 +152,9 @@ export class Planner {
   private position: Coordinate | null = null;
   /** Circles every route stays out of: what the pen erased, blocked or fenced off. */
   avoid = $state.raw<AvoidArea[]>([]);
+  /** Ferries and steps the route leaves out where it can: the app's Route Options, as a link
+   *  brings them. The planner has no switches of its own for them yet. */
+  without = $state.raw<Way[]>([]);
   /** The areas drawn round, for the map. Their circles are in `avoid`. */
   zones = $state.raw<Zone[]>([]);
   penStatus = $state.raw<PenStatus | null>(null);
@@ -217,11 +225,20 @@ export class Planner {
     return [start, ...places, ...rest.slice(-1)];
   }
 
-  /** What the address keeps: the sport and the points, for a planned route. A line has no plan. */
+  /** What the address keeps, for a planned route: the sport, the points, the route chosen among
+   *  those offered, what it keeps out of and its name. A line has no plan. */
   get planState(): PlanState | null {
     const points = this.waypoints;
     if (this.line || points.length < 2) return null;
-    return { sport: this.sport, points: points.map(({ latitude, longitude, kind }) => ({ latitude, longitude, kind: kind === 'shaping' ? 'shaping' : 'stop' })) };
+    const route = this.route;
+    return {
+      sport: this.sport,
+      points: points.map(({ latitude, longitude, kind }) => ({ latitude, longitude, kind: kind === 'shaping' ? 'shaping' : 'stop' })),
+      alternative: this.wantedAlternative || (route.status === 'ready' ? route.selected : 0),
+      avoid: this.avoid,
+      without: this.without,
+      name: this.planName,
+    };
   }
 
   /** The route's name, as the app names a fresh route: the file's it came from, else for where it
@@ -243,7 +260,7 @@ export class Planner {
   private snapshot(): Snapshot {
     return {
       stops: this.stops.map((stop) => ({ ...stop, place: stop.place && { ...stop.place } })),
-      planName: this.planName, sport: this.sport, line: this.line, avoid: this.avoid, zones: this.zones,
+      planName: this.planName, sport: this.sport, line: this.line, avoid: this.avoid, without: this.without, zones: this.zones,
     };
   }
 
@@ -251,6 +268,8 @@ export class Planner {
    *  fitted stays the line it is. */
   private record(snapshot = this.snapshot()): void {
     this.stopFitting();
+    this.wantedAlternative = 0;
+    this.linkedRoute = null;
     this.past = [...this.past.slice(-99), snapshot];
     this.future = [];
     this.locationMessage = '';
@@ -261,12 +280,15 @@ export class Planner {
     this.penRequest?.abort();
     this.penStatus = null;
     this.selectedZone = null;
+    this.wantedAlternative = 0;
+    this.linkedRoute = null;
     this.stops = snapshot.stops;
     this.planName = snapshot.planName;
     this.fillMyLocation();
     this.sport = snapshot.sport;
     this.line = snapshot.line;
     this.avoid = snapshot.avoid;
+    this.without = snapshot.without;
     this.zones = snapshot.zones;
     if (snapshot.line) this.showLine(snapshot.line);
     else this.plan();
@@ -470,14 +492,20 @@ export class Planner {
 
   // ---------- Opening a plan ----------
 
-  /** A plan from the address: the points, named again by search. */
+  /** A plan from the address: the points, named again by search, kept out of what it was kept out
+   *  of, and once the alternatives come, the route it chose among them. */
   open(state: PlanState): void {
     this.naming?.abort();
     this.record();
     this.line = null;
-    this.planName = null;
+    this.planName = state.name;
     this.sport = state.sport;
     this.stops = state.points.map((point) => newStop(droppedPin(point, point.kind), point.kind));
+    this.avoid = state.avoid;
+    this.without = state.without;
+    this.zones = [];
+    this.wantedAlternative = state.alternative;
+    this.linkedRoute = state.alternative;
     this.plan();
     for (const stop of this.stops) this.name(stop.id, stop.place!);
   }
@@ -490,6 +518,8 @@ export class Planner {
     this.naming?.abort();
     this.record();
     this.importMessage = '';
+    // A file carries no Route Options: it is planned as anything else is.
+    this.without = [];
     const sport = sportOf(track);
     if (sport) this.sport = sport;
     // A file with no name of its own leaves the plan to be named for where it goes.
@@ -556,8 +586,8 @@ export class Planner {
     const request = new AbortController();
     this.fitRequest = request;
     this.fitting = 'fitting';
-    const sport = this.sport, avoid = this.avoid;
-    const context = stretchContext(sport, avoid);
+    const sport = this.sport, avoid = this.avoid, without = this.without;
+    const context = stretchContext(sport, avoid, without);
     const ends = [this.stops[0].place, this.stops.at(-1)!.place];
     const stops: Waypoint[] = [ends[0] ?? line.track.coordinates[0], ...line.places, ends[1] ?? line.track.coordinates.at(-1)!]
       .map(({ latitude, longitude }) => ({ latitude, longitude, kind: 'stop' }));
@@ -567,7 +597,7 @@ export class Planner {
     const mayRoute = (routings: number) => this.requestCount - before + routings <= fitRequests
       && this.requestsThisMinute() + routings <= brouterRequestsPerMinute;
     let refused = false;
-    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, signal: request.signal })
+    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, without, signal: request.signal })
       .catch((error: unknown) => {
         if (error instanceof Error && /retry later/i.test(error.message)) refused = true;
         throw error;
@@ -648,6 +678,7 @@ export class Planner {
   chooseRoute(index: number): void {
     const route = this.route;
     if (route.status !== 'ready' || !route.tracks[index] || index === route.selected) return;
+    this.wantedAlternative = 0;
     this.route = { ...route, track: route.tracks[index], selected: index };
   }
 
@@ -671,7 +702,7 @@ export class Planner {
     this.selectedZone = null;
     this.penStatus = { kind: 'planning' };
     const router = (waypoints: Waypoint[], avoid: AvoidArea[], signal?: AbortSignal) =>
-      this.client.route(waypoints, this.sport, { avoid, signal });
+      this.client.route(waypoints, this.sport, { avoid, without: this.without, signal });
     const stillCurrent = () => this.penRequest === request && this.route.status === 'ready' && this.route.track === track;
     try {
       if (edit.kind === 'avoidZone') {
@@ -759,8 +790,10 @@ export class Planner {
     if (waypoints.length < 2) {
       this.request = null;
       this.route = { status: 'idle' };
-      // Nothing to keep out of without a route: a new one starts clean.
+      // Nothing to keep out of without a route: a new one starts clean, ferries and steps too, as
+      // there is nowhere to see they were left out.
       this.avoid = [];
+      this.without = [];
       this.zones = [];
       return;
     }
@@ -769,20 +802,23 @@ export class Planner {
     const previous = this.route.status === 'ready' ? this.route.track
       : this.route.status === 'planning' ? this.route.previous : null;
     this.route = { status: 'planning', previous };
-    const avoid = this.avoid, sport = this.sport;
+    const avoid = this.avoid, without = this.without, sport = this.sport;
     // A route through shaping points is one the rider drew; there is nothing else to offer. As it
     // is one route, only the stretches the last edit touched are asked for (plan Phase 7k). A plan
     // that will have alternatives is asked for whole, as each alternative is.
     const shaped = waypoints.some((w) => w.kind === 'shaping');
-    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, signal: request.signal });
-    (shaped ? routeStretches(waypoints, this.stretches, stretchContext(sport, avoid), route) : route(waypoints)).then(
+    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, without, signal: request.signal });
+    (shaped ? routeStretches(waypoints, this.stretches, stretchContext(sport, avoid, without), route) : route(waypoints)).then(
       (track) => {
         if (this.request !== request) return;
         this.route = { status: 'ready', track, tracks: [track], selected: 0, waypoints };
+        // A drawn route is offered alone, whatever a link chose.
         if (!shaped) this.findAlternatives(request, waypoints, avoid);
+        else if (this.wantedAlternative) this.giveUpAlternative();
       },
       (error: unknown) => {
         if (this.request !== request || request.signal.aborted) return;
+        this.giveUpAlternative();
         this.route = { status: 'failed', message: messageFor(error) };
       },
     );
@@ -790,23 +826,36 @@ export class Planner {
 
   /** The alternatives, once the plan has rested, one after another, best first. A failed one only
    *  ends the search for more; one that repeats a route already found (BRouter's answer when it
-   *  has nothing different) is left out. A new plan cancels the lot. */
+   *  has nothing different) is left out. A new plan cancels the lot. The route a link chose is
+   *  shown as it comes; a link has no edits to wait out. */
   private findAlternatives(request: AbortController, waypoints: Waypoint[], avoid: AvoidArea[]): void {
     const signal = request.signal;
     const rested = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, alternativesDelay);
+      const timer = setTimeout(resolve, this.wantedAlternative ? 0 : alternativesDelay);
       signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
     });
     (async () => {
       await rested;
       for (let alternative = 1; alternative <= alternatives; alternative++) {
-        const track = await this.client.route(waypoints, this.sport, { alternative, avoid, signal });
+        const track = await this.client.route(waypoints, this.sport, { alternative, avoid, without: this.without, signal });
         const route = this.route;
         if (this.request !== request || route.status !== 'ready') return;
         if (route.tracks.some((known) => Math.abs(known.length - track.length) < 1 && known.coordinates.length === track.coordinates.length)) continue;
-        this.route = { ...route, tracks: [...route.tracks, track] };
+        const tracks = [...route.tracks, track];
+        const wanted = this.wantedAlternative === tracks.length - 1;
+        this.route = wanted ? { ...route, tracks, track, selected: tracks.length - 1 } : { ...route, tracks };
+        if (wanted) this.wantedAlternative = 0;
       }
-    })().catch(() => { /* the alternatives found stand */ });
+    })().catch(() => { /* the alternatives found stand */ }).finally(() => {
+      // Offered fewer routes than the link was made with: it shows the best.
+      if (this.request === request && this.wantedAlternative) this.giveUpAlternative();
+    });
+  }
+
+  /** The route a link chose isn't among those offered: none is marked as the link's. */
+  private giveUpAlternative(): void {
+    this.wantedAlternative = 0;
+    this.linkedRoute = null;
   }
 
   /** Names a point placed by coordinates after what search finds there: a stop by its address,

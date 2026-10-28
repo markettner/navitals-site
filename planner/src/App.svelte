@@ -73,6 +73,8 @@
   /** The pen is out: strokes on the map edit the route (`Planner.draw`). */
   let drawing = $state(false);
   const touchScreen = window.matchMedia('(pointer: coarse)').matches;
+  // iPadOS asks for the desktop site as a Mac.
+  const onApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
   const canDraw = $derived(planner.route.status === 'ready');
 
   async function toggleDrawing() {
@@ -197,7 +199,7 @@
   $effect(() => {
     const route = planner.route;
     if (route.status === 'ready') {
-      view?.showRoutes(route.tracks.map((track) => ({ line: track.coordinates, label: kilometres(track.length) })), route.selected);
+      view?.showRoutes(route.tracks.map((track, index) => ({ line: track.coordinates, label: routeTitle(track.length, index) })), route.selected);
       const line = route.track.coordinates;
       const ends = [line[0], line.at(-1)!].map((p) => `${p.latitude.toFixed(3)},${p.longitude.toFixed(3)}`).join('|');
       if (ends !== fittedEnds) view?.fit(line, padding());
@@ -220,6 +222,11 @@
   const tenths = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   function kilometres(metres: number): string {
     return `${tenths.format(metres / 1000)} km`;
+  }
+
+  /** A route among those offered, by its length; the one a link chose says so, as in the app. */
+  function routeTitle(metres: number, index: number): string {
+    return planner.linkedRoute === index ? `From link · ${kilometres(metres)}` : kilometres(metres);
   }
 
   /** Room for the card: beside it on a wide window, above it on a phone. And above the pen's bar,
@@ -257,6 +264,42 @@
   function changeMap(next: MapChoice) {
     choice = next;
     saveChoice(next);
+  }
+
+  /** The plan's link: the planner with the plan and nothing else in the hash, as the app shares it
+   *  (docs/ROUTE_LINK.md). The map frames the route when it opens, so its view needn't travel. */
+  const planLink = $derived(planner.planState && `${location.origin}${location.pathname}#${withPlan('', planner.planState)}`);
+  /** The same plan under the app's scheme, offered on Apple devices, where the app can be. */
+  const appLink = $derived(onApple && planner.planState ? `navitals://open#${withPlan('', planner.planState)}` : null);
+  let linkMessage = $state('');
+
+  async function shareLink() {
+    if (!planLink) return;
+    // A phone shares with its own sheet; a computer copies, to paste where it's wanted.
+    if (touchScreen && navigator.share) {
+      try {
+        await navigator.share({ title: planner.title, url: planLink });
+      } catch {
+        // Dismissed: nothing to say.
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(planLink);
+      linkMessage = 'Link copied.';
+    } catch {
+      // Where the clipboard API is refused (an embedded view, an older browser), the old way.
+      const field = document.createElement('textarea');
+      field.value = planLink;
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      document.body.append(field);
+      field.select();
+      const copied = document.execCommand('copy');
+      field.remove();
+      linkMessage = copied ? 'Link copied.' : "The link couldn't be copied; the address bar holds it too.";
+    }
+    setTimeout(() => (linkMessage = ''), 2500);
   }
 
   function exportGPX() {
@@ -345,13 +388,22 @@
     <RouteSummary route={planner.route} locating={planner.waitingForLocation} />
     {#if planner.route.status === 'ready' && planner.route.tracks.length > 1}
       <Pills label="Routes" value={String(planner.route.selected)} onchoose={(id) => planner.chooseRoute(Number(id))}
-             options={planner.route.tracks.map((track, index) => ({ id: String(index), title: kilometres(track.length) }))} />
+             options={planner.route.tracks.map((track, index) => ({ id: String(index), title: routeTitle(track.length, index) }))} />
     {/if}
     {#if planner.route.status === 'ready'}
       <ElevationProfile track={planner.route.track} onpoint={(point) => view?.showPosition(point)} />
     {/if}
     {#if planner.route.status === 'ready'}
-      <button type="button" class="primary-button" onclick={exportGPX}>Export GPX</button>
+      <div class="route-actions">
+        <button type="button" class="primary-button" onclick={exportGPX}>Export GPX</button>
+        {#if planLink}
+          <button type="button" class="secondary-button" onclick={shareLink}>{touchScreen && 'share' in navigator ? 'Share Link' : 'Copy Link'}</button>
+        {/if}
+        {#if appLink}
+          <a class="secondary-button" href={appLink}>Open in Navitals</a>
+        {/if}
+      </div>
+      {#if linkMessage}<p class="summary-message" role="status">{linkMessage}</p>{/if}
     {/if}
     {#if planner.importMessage}<p class="summary-message" role="alert">{planner.importMessage}</p>{/if}
   </div>

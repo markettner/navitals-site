@@ -47,6 +47,9 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+          # .well-known/apple-app-site-association, which makes a shared route open the app. The
+          # only other tracked dotfiles, the .gitignores, never reach _site.
+          include-hidden-files: true
 
   deploy:
     needs: build

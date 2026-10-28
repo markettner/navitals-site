@@ -1,0 +1,192 @@
+{
+  "written": [
+    {
+      "about": "A plan with a shaping point, an avoided circle, ferries left out and a name",
+      "hash": "route=gravel;52.52192,13.41321;52.49300,13.45900,s;52.44000,13.64500&avoid=52.47000,13.50000,120&without=ferries&name=Alexanderplatz+to+M%C3%BCggelsee",
+      "plan": {
+        "sport": "gravel",
+        "points": [
+          {
+            "latitude": 52.52192,
+            "longitude": 13.41321,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.493,
+            "longitude": 13.459,
+            "kind": "shaping"
+          },
+          {
+            "latitude": 52.44,
+            "longitude": 13.645,
+            "kind": "stop"
+          }
+        ],
+        "alternative": 0,
+        "avoid": [
+          {
+            "latitude": 52.47,
+            "longitude": 13.5,
+            "radius": 120
+          }
+        ],
+        "without": [
+          "ferries"
+        ],
+        "name": "Alexanderplatz to Müggelsee"
+      }
+    },
+    {
+      "about": "The third route offered, and a name with characters the hash itself uses",
+      "hash": "route=mountainBike;52.51627,13.37770;52.47512,13.29800;52.51627,13.37770&alt=2&name=Mauerweg+%26+more,+S%C3%BCd/West+%23r%C3%BCck",
+      "plan": {
+        "sport": "mountainBike",
+        "points": [
+          {
+            "latitude": 52.51627,
+            "longitude": 13.3777,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.47512,
+            "longitude": 13.298,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.51627,
+            "longitude": 13.3777,
+            "kind": "stop"
+          }
+        ],
+        "alternative": 2,
+        "avoid": [],
+        "without": [],
+        "name": "Mauerweg & more, Süd/West #rück"
+      }
+    },
+    {
+      "about": "Just the plan: what the planner wrote before alternatives, avoided circles and names travelled",
+      "hash": "route=cycling;52.50000,13.40000;52.40000,13.50000",
+      "plan": {
+        "sport": "cycling",
+        "points": [
+          {
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.4,
+            "longitude": 13.5,
+            "kind": "stop"
+          }
+        ],
+        "alternative": 0,
+        "avoid": [],
+        "without": [],
+        "name": null
+      }
+    }
+  ],
+  "read": [
+    {
+      "about": "Beside the map's own view, in any order, with fewer decimals",
+      "hash": "name=Kurz&map=12/52.5/13.4&route=road;52.5,13.4;52.45,13.45,s;52.4,13.5&alt=1",
+      "plan": {
+        "sport": "road",
+        "points": [
+          {
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.45,
+            "longitude": 13.45,
+            "kind": "shaping"
+          },
+          {
+            "latitude": 52.4,
+            "longitude": 13.5,
+            "kind": "stop"
+          }
+        ],
+        "alternative": 1,
+        "avoid": [],
+        "without": [],
+        "name": "Kurz"
+      }
+    },
+    {
+      "about": "Ends are never shaping points; a broken extra is left out, the plan still opens",
+      "hash": "route=hiking;52.5,13.4,s;52.4,13.5,s&alt=x&avoid=52.4,13.5&name=",
+      "plan": {
+        "sport": "hiking",
+        "points": [
+          {
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.4,
+            "longitude": 13.5,
+            "kind": "stop"
+          }
+        ],
+        "alternative": 0,
+        "avoid": [],
+        "without": [],
+        "name": null
+      }
+    },
+    {
+      "about": "Ways to leave out in any order, and one this reader doesn't know left out",
+      "hash": "route=gravel;52.5,13.4;52.4,13.5&without=steps,boats,ferries,steps",
+      "plan": {
+        "sport": "gravel",
+        "points": [
+          {
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.4,
+            "longitude": 13.5,
+            "kind": "stop"
+          }
+        ],
+        "alternative": 0,
+        "avoid": [],
+        "without": [
+          "ferries",
+          "steps"
+        ],
+        "name": null
+      }
+    }
+  ],
+  "rejected": [
+    {
+      "about": "A sport the app doesn't know",
+      "hash": "route=bike;52.5,13.4;52.4,13.5"
+    },
+    {
+      "about": "One point is no route",
+      "hash": "route=gravel;52.5,13.4"
+    },
+    {
+      "about": "A latitude off the globe",
+      "hash": "route=gravel;52.5,13.4;95,13.5"
+    },
+    {
+      "about": "A mark that isn't a shaping point",
+      "hash": "route=gravel;52.5,13.4;52.4,13.5,x"
+    },
+    {
+      "about": "No plan at all",
+      "hash": "map=12/52.5/13.4"
+    }
+  ]
+}

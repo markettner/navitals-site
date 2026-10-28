@@ -1,8 +1,7 @@
-// The app's RoutePositionTests, and the plan in the address.
+// The app's RoutePositionTests.
 
 import { describe, expect, test } from 'vitest';
 import { climbing, insertionIndex, prefix, stopPositions, suffix, type Coordinate } from '../src/core/geodesy';
-import { decodePlan, encodePlan, planIn, withPlan } from '../src/core/urlState';
 
 const c = (latitude: number, longitude: number): Coordinate => ({ latitude, longitude });
 
@@ -35,40 +34,6 @@ describe('positions along a route', () => {
     expect(tail).toHaveLength(2);
     expect(tail[0].longitude).toBeCloseTo(1.5, 9);
     expect(suffix(route, 1)).toHaveLength(2);
-  });
-});
-
-describe('the plan in the address', () => {
-  const plan = {
-    sport: 'gravel' as const,
-    points: [
-      { latitude: 52.5219184, longitude: 13.4132147, kind: 'stop' as const },
-      { latitude: 52.493, longitude: 13.459, kind: 'shaping' as const },
-      { latitude: 52.44, longitude: 13.645, kind: 'stop' as const },
-    ],
-  };
-
-  test('reads back what it writes, to a metre', () => {
-    expect(encodePlan(plan)).toBe('gravel;52.52192,13.41321;52.49300,13.45900,s;52.44000,13.64500');
-    const back = decodePlan(encodePlan(plan))!;
-    expect(back.sport).toBe('gravel');
-    expect(back.points.map((p) => p.kind)).toEqual(['stop', 'shaping', 'stop']);
-    expect(back.points[0].latitude).toBeCloseTo(52.52192, 5);
-  });
-
-  test("lives beside MapLibre's view in the hash, and leaves it alone", () => {
-    const hash = withPlan('#map=12/52.5/13.4', plan);
-    expect(hash).toBe('map=12/52.5/13.4&route=gravel;52.52192,13.41321;52.49300,13.45900,s;52.44000,13.64500');
-    expect(planIn(`#${hash}`)?.points).toHaveLength(3);
-    expect(withPlan(`#${hash}`, null)).toBe('map=12/52.5/13.4');
-  });
-
-  test('a link that is not a plan is no plan, and ends are never bends', () => {
-    expect(decodePlan('bike;52.5,13.4;52.4,13.5')).toBeNull();
-    expect(decodePlan('gravel;52.5,13.4')).toBeNull();
-    expect(decodePlan('gravel;52.5,13.4;95,13.5')).toBeNull();
-    expect(decodePlan('gravel;52.5,13.4;52.4,13.5,x')).toBeNull();
-    expect(decodePlan('gravel;52.5,13.4,s;52.4,13.5,s')?.points.map((p) => p.kind)).toEqual(['stop', 'stop']);
   });
 });
 

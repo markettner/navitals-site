@@ -2,7 +2,7 @@
 // route planned here is the route the app plans through the same points.
 
 import { distance, length, type Coordinate } from './geodesy';
-import type { Sport, Waypoint } from './route';
+import type { Sport, Way, Waypoint } from './route';
 
 const profiles: Record<Sport, string> = {
   cycling: 'trekking',
@@ -38,11 +38,13 @@ export function lonlats(waypoints: Waypoint[]): string {
 /** brouter-web's `profile:<name>=<value>` parameters for a request through these points.
  *  `pass2coefficient` 1 points BRouter's second search at the destination (the app measured the
  *  same routes up to 2.5× faster), and misplaced vias are corrected only when there is a shaping
- *  point for it to correct. */
-export function profileParameters(waypoints: Waypoint[]): Record<string, string> {
+ *  point for it to correct. Ferries and steps to leave out switch the profile's own `allow_…` off
+ *  (gravel's are ours); nothing is sent for what is allowed. */
+export function profileParameters(waypoints: Waypoint[], without: Way[] = []): Record<string, string> {
   const shaped = waypoints.slice(1, -1).some((waypoint) => waypoint.kind === 'shaping');
   const parameters: Record<string, string> = { pass2coefficient: '1' };
   if (shaped) parameters.correctMisplacedViaPoints = '1';
+  for (const way of without) parameters[`allow_${way}`] = '0';
   return parameters;
 }
 
@@ -60,7 +62,8 @@ export function nogos(areas: AvoidArea[]): string {
 
 /** The GET request for one route: 0 is the best, up to 3 the alternatives BRouter computes on
  *  request, one call each. */
-export function routeURL(base: string, waypoints: Waypoint[], profile: string, alternative = 0, avoid: AvoidArea[] = []): string {
+export function routeURL(base: string, waypoints: Waypoint[], profile: string, alternative = 0, avoid: AvoidArea[] = [],
+  without: Way[] = []): string {
   const query = new URLSearchParams({
     lonlats: lonlats(waypoints),
     profile,
@@ -68,7 +71,7 @@ export function routeURL(base: string, waypoints: Waypoint[], profile: string, a
     format: 'geojson',
   });
   if (avoid.length) query.set('nogos', nogos(avoid));
-  for (const [name, value] of Object.entries(profileParameters(waypoints))) {
+  for (const [name, value] of Object.entries(profileParameters(waypoints, without))) {
     query.set(`profile:${name}`, value);
   }
   // `|` and `,` read better unescaped, and BRouter takes them either way.

@@ -42,6 +42,8 @@ describe('BRouter request', () => {
     expect(profileParameters([a, b])).toEqual({ pass2coefficient: '1' });
     expect(profileParameters([a, stop, b])).toEqual({ pass2coefficient: '1' });
     expect(profileParameters([a, shaping, stop, b])).toEqual({ pass2coefficient: '1', correctMisplacedViaPoints: '1' });
+    // Ferries and steps go only when they are to be left out, as the profiles' own switches.
+    expect(profileParameters([a, b], ['ferries', 'steps'])).toEqual({ pass2coefficient: '1', allow_ferries: '0', allow_steps: '0' });
   });
 
   test("the request is the app's: its lonlats and profile parameters, brouter-web's other fields", () => {

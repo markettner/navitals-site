@@ -4,11 +4,12 @@
 // `custom_<id>`) and routed with by that id. brouter.de forgets custom profiles after a while and
 // then answers a route for the id with an empty 500, so on a failure the profile is uploaded again
 // and the route asked once more. If an upload fails outright, brouter.de's own profile of the same
-// name is used: today our files are brouter.de's copies (checked 2026-10-17, all five identical).
+// name is used: our files are brouter.de's copies (checked 2026-10-17), but for the ferry and steps
+// switches the app added to gravel, which brouter.de's gravel goes without.
 
 import { BRouterDecodeError, decode, profileFor, routeURL, type AvoidArea, type Track } from './brouter';
 import { nearSideWaypoints } from './nearSide';
-import type { Sport, Waypoint } from './route';
+import type { Sport, Way, Waypoint } from './route';
 
 export const brouterBase = 'https://brouter.de/brouter';
 
@@ -18,6 +19,8 @@ export interface RouteRequestOptions {
   alternative?: number;
   /** Circles to stay out of. */
   avoid?: AvoidArea[];
+  /** Ferries and steps to leave out, where there is a way round them. */
+  without?: Way[];
   signal?: AbortSignal;
 }
 
@@ -45,7 +48,16 @@ export class BRouterClient {
    *  a divided road is moved to the near side and the route asked again, once, when the first
    *  answer loops to reach it; the second answer is kept only if it is shorter. As the app does. */
   async route(waypoints: Waypoint[], sport: Sport, options: RouteRequestOptions = {}): Promise<Track> {
-    const track = await this.answer(waypoints, sport, options);
+    let track: Track;
+    try {
+      track = await this.answer(waypoints, sport, options);
+    } catch (error) {
+      // To BRouter a ferry or steps switched off are closed, and the app's Route Options promise a
+      // preference: where there is no way round, the route takes them. As the app does.
+      if (options.signal?.aborted || !options.without?.length) throw error;
+      options = { ...options, without: [] };
+      track = await this.answer(waypoints, sport, options);
+    }
     const nearSide = nearSideWaypoints(waypoints, track.coordinates);
     if (!nearSide) return track;
     try {
@@ -80,7 +92,8 @@ export class BRouterClient {
   }
 
   private get(waypoints: Waypoint[], profile: string, options: RouteRequestOptions): Promise<Response> {
-    return this.fetch(routeURL(this.base, waypoints, profile, options.alternative ?? 0, options.avoid), { signal: options.signal });
+    return this.fetch(routeURL(this.base, waypoints, profile, options.alternative ?? 0, options.avoid, options.without),
+      { signal: options.signal });
   }
 
   /** Our profile's id on brouter.de, uploading it if this visit hasn't yet. */

@@ -17,7 +17,7 @@
 import { lonlats, type AvoidArea, type Track } from './brouter';
 import { climbing, distance, type Coordinate } from './geodesy';
 import { reachIndices } from './nearSide';
-import type { Sport, Waypoint } from './route';
+import type { Sport, Way, Waypoint } from './route';
 
 /** What a stretch of BRouter's line depends on: its two points as BRouter is sent them, and the
  *  point beyond each end that is a shaping point in the middle of the plan. One per stretch, in
@@ -142,11 +142,11 @@ export function replanned(known: (Track | null)[], windows: { waypoints: [number
   return joined(pieces);
 }
 
-/** What a stretch is only good for: the profile, the places to avoid, and the tiles it was routed
+/** What a stretch is only good for: the profile, the places and ways to avoid, and the tiles it was routed
  *  over. brouter.de doesn't say which tiles those were (it renews them every few days), so a
  *  stretch is kept within the hour it was asked for. */
-export function stretchContext(sport: Sport, avoid: AvoidArea[], now = Date.now()): string {
-  return JSON.stringify([sport, avoid.map((a) => [a.latitude, a.longitude, a.radius]), Math.floor(now / 3_600_000)]);
+export function stretchContext(sport: Sport, avoid: AvoidArea[], without: Way[] = [], now = Date.now()): string {
+  return JSON.stringify([sport, avoid.map((a) => [a.latitude, a.longitude, a.radius]), without, Math.floor(now / 3_600_000)]);
 }
 
 /** The stretches of the lines planned lately, for one context: when it changes, the cache starts

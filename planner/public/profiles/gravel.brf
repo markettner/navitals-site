@@ -33,6 +33,9 @@ assign prefer_forests false # %prefer_forests% | Enable to prefer forest areas |
 assign prefer_rivers false # %prefer_rivers% | Enable to prefer river valleys | boolean
 assign avoid_towns false # %avoid_towns% | Enable to avoid urban areas | boolean
 assign avoid_noise false # %avoid_noise% | Enable to avoid noisy areas | boolean
+# Navitals: the switches the other profiles have, for the Route Options (BRouter.profileParameters)
+assign allow_steps   true # %allow_steps% | Set to false to disallow steps | boolean
+assign allow_ferries true # %allow_ferries% | Set to false to disallow ferries | boolean
 
 # with engine defaults, long parts of routing to via points may be removed
 assign correctMisplacedViaPoints = false # %correctMisplacedViaPoints% | Set to true to remove detours due to via points (going back and forth on the same route) | boolean
@@ -263,7 +266,7 @@ assign costfactor
     multiply tracktypepenalty
     switch or highway=motorway|motorway_link motorroad=yes      10000
     switch    and nobikeaccess nofootaccess                     10000
-    switch    highway= switch not route=ferry                   10000 2
+    switch    highway= switch not route=ferry                   10000 switch allow_ferries 2 10000
     switch    highway=trunk|trunk_link switch any_cycleroute    20 80
     switch    highway=bridleway|raceway switch not bicycle=yes  20 5
     switch    highway=pedestrian switch not bicycle=yes         8 3
@@ -278,7 +281,7 @@ assign costfactor
     switch    highway=residential switch not maxspeed=30        2.2 1.8
     switch    highway=track                                     1.0
     switch    highway=path                                      pathpenalty
-    switch    highway=steps                                     stepspenalty
+    switch    highway=steps                                     switch allow_steps stepspenalty 10000
     switch    highway=footway                                   footwaypenalty
     switch    highway=cycleway                                  cyclewaypenalty
                                                                 10000

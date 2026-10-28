@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["JYCL69MK3Y.com.markettner.Navitals"],
+        "components": [
+          {
+            "/": "/planner/",
+            "#": "*route=*",
+            "comment": "A shared route, its plan after the # (the app's docs/ROUTE_LINK.md). The planner without a plan stays a web page."
+          }
+        ]
+      }
+    ]
+  }
+}

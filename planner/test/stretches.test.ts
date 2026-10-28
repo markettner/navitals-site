@@ -194,14 +194,15 @@ describe('asking brouter.de', () => {
     expect(back.coordinates).toEqual((await router().route(shaped)).coordinates);
   });
 
-  test('another sport, places to avoid or hour starts afresh', async () => {
+  test('another sport, places or ways to avoid, or hour starts afresh', async () => {
     const brouter = router(), cache = new StretchCache();
     await routeStretches(shaped, cache, stretchContext('cycling', []), brouter.route);
     await routeStretches(shaped, cache, stretchContext('gravel', []), brouter.route);
     await routeStretches(shaped, cache, stretchContext('gravel', [{ latitude: 52.5, longitude: 13.3, radius: 30 }]), brouter.route);
+    await routeStretches(shaped, cache, stretchContext('gravel', [{ latitude: 52.5, longitude: 13.3, radius: 30 }], ['ferries']), brouter.route);
     const hour = 3_600_000;
-    expect(stretchContext('gravel', [], 5 * hour)).not.toBe(stretchContext('gravel', [], 6 * hour));
-    expect(brouter.asked).toHaveLength(3);
+    expect(stretchContext('gravel', [], [], 5 * hour)).not.toBe(stretchContext('gravel', [], [], 6 * hour));
+    expect(brouter.asked).toHaveLength(4);
     expect(brouter.asked.every((asked) => asked.length === shaped.length)).toBe(true);
   });
 
