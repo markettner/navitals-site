@@ -12,6 +12,16 @@ import { replacing } from './splice';
 /** One route between waypoints, staying out of `avoid`: brouter.de, or a fake in the tests. */
 export type Router = (waypoints: Waypoint[], avoid: AvoidArea[], signal?: AbortSignal) => Promise<Track>;
 
+/** Whether one more way may be tried after the first: brouter.de counts requests. */
+export type MayRoute = () => boolean;
+
+/** An edit that found no way before it ran out of requests to try more. */
+export class OutOfRequests extends Error {
+  constructor() {
+    super('Please, retry later!');
+  }
+}
+
 export interface PlannedEdit {
   /** The whole route after the edit. */
   track: Track;
@@ -28,7 +38,8 @@ export const detourSpans = [400, 1_500, 4_000];
 
 /** The route after a ride-through, erase or blocked edit. Throws when no way was found. */
 export async function planEdit(edit: Exclude<PenEdit, { kind: 'avoidZone' }>, stroke: Coordinate[], track: Track,
-                               avoid: AvoidArea[], router: Router, signal?: AbortSignal): Promise<PlannedEdit> {
+                               avoid: AvoidArea[], router: Router, signal?: AbortSignal,
+                               mayRoute: MayRoute = () => true): Promise<PlannedEdit> {
   const line = track.coordinates;
   const total = length(line);
   const connector = (from: number, to: number, through: Coordinate[], extra: AvoidArea[]): Promise<Track> => {
@@ -55,7 +66,11 @@ export async function planEdit(edit: Exclude<PenEdit, { kind: 'avoidZone' }>, st
       candidates.push({ through: [], avoid: sectionAvoidance(line, from, to) });
       let best: { track: Track; misfit: number } | null = null;
       let lastError: unknown = new Error('No route.');
-      for (const candidate of candidates) {
+      for (const [index, candidate] of candidates.entries()) {
+        if (index > 0 && !mayRoute()) {
+          if (!best) throw new OutOfRequests();
+          break;
+        }
         try {
           const found = await connector(from, to, candidate.through, candidate.avoid);
           const fit = misfit(found.coordinates, stroke);
@@ -76,7 +91,8 @@ export async function planEdit(edit: Exclude<PenEdit, { kind: 'avoidZone' }>, st
     case 'blocked': {
       const extra = [{ ...edit.point, radius: blockRadius }];
       let lastError: unknown = new Error('No route.');
-      for (const span of detourSpans) {
+      for (const [index, span] of detourSpans.entries()) {
+        if (index > 0 && !mayRoute()) throw new OutOfRequests();
         const from = Math.max(0, edit.along - span), to = Math.min(total, edit.along + span);
         try {
           return { track: splice(from, to, await connector(from, to, [], extra)), avoid: extra, removed: null };
@@ -95,23 +111,24 @@ export async function planEdit(edit: Exclude<PenEdit, { kind: 'avoidZone' }>, st
  *  earlier ones stay true. `passes` is false when the route never entered it, and the route is then
  *  as it was. */
 export async function avoidZone(polygon: Coordinate[], track: Track, avoid: AvoidArea[], router: Router,
-                                signal?: AbortSignal): Promise<{ track: Track; circles: AvoidArea[]; passes: boolean }> {
+                                signal?: AbortSignal, mayRoute: MayRoute = () => true): Promise<{ track: Track; circles: AvoidArea[]; passes: boolean }> {
   const circles = coverage(polygon).map(({ center, radius }) => ({ ...center, radius }));
   const inside = stretches(track.coordinates, polygon);
   if (!inside.length) return { track, circles, passes: false };
   let current = track;
   for (const stretch of [...inside].reverse()) {
-    current = await detour(stretch, current, polygon, [...avoid, ...circles], router, signal);
+    current = await detour(stretch, current, polygon, [...avoid, ...circles], router, signal, mayRoute);
   }
   return { track: current, circles, passes: true };
 }
 
 async function detour(stretch: [number, number], track: Track, polygon: Coordinate[], avoid: AvoidArea[],
-                      router: Router, signal?: AbortSignal): Promise<Track> {
+                      router: Router, signal?: AbortSignal, mayRoute: MayRoute = () => true): Promise<Track> {
   const line = track.coordinates;
   const total = length(line);
   let lastError: unknown = new Error('No route.');
-  for (const margin of detourSpans) {
+  for (const [index, margin] of detourSpans.entries()) {
+    if (index > 0 && !mayRoute()) throw new OutOfRequests();
     let from = Math.max(0, stretch[0] - margin), to = Math.min(total, stretch[1] + margin);
     // A join inside the zone would make the router ignore the zone there.
     while (from > 0 && contains(polygon, cut(line, from)!)) from = Math.max(0, from - 200);

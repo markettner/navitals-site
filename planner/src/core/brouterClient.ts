@@ -19,6 +19,14 @@ export const brouterBase = 'https://brouter.de/brouter';
 
 export class RoutingError extends Error {}
 
+/** BRouter's own answer that there is no route ("no track found …", "target island …"), rather
+ *  than brouter.de refusing the request ("Please, retry later!", or a bare status), or a point off
+ *  its map ("position not mapped …"). */
+export function isNoRoute(error: unknown): boolean {
+  return error instanceof RoutingError
+    && !/retry later|not mapped|^brouter\.de answered \d+\.$/i.test(error.message);
+}
+
 export interface RouteRequestOptions {
   alternative?: number;
   /** Circles to stay out of. */
@@ -61,8 +69,9 @@ export class BRouterClient {
       track = await this.answer(waypoints, sport, options);
     } catch (error) {
       // To BRouter a ferry or steps switched off are closed, and the app's Route Options promise a
-      // preference: where there is no way round, the route takes them. As the app does.
-      if (options.signal?.aborted || !options.without?.length) throw error;
+      // preference: where there is no way round, the route takes them. As the app does. Only when
+      // BRouter found no route: a refusal, a lost connection or an off-map point would be again.
+      if (options.signal?.aborted || !options.without?.length || !isNoRoute(error)) throw error;
       options = { ...options, without: [] };
       track = await this.answer(waypoints, sport, options);
     }

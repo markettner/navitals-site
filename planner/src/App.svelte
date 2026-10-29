@@ -167,6 +167,8 @@
     view?.setOverlays(overlays);
     if (!overlays.length) return;
     loadOverlays().then((available) => {
+      // A message up means the mirror failed before: what the map asked of it then failed too.
+      if (available && overlayMessage) view?.reloadOverlays();
       overlayMessage = available ? '' : "The route overlays can't be loaded right now.";
     });
   });

@@ -3,12 +3,13 @@
    network of roads and trails), then keeps planning a random route from one edge to the opposite one,
    finds the shortest way along the network, and lets the heart ride it.
 
-   Usage: <script src="trailmap.js"></script> in <head> (not deferred), then first in <body>
-   <canvas class="trail-map" data-trail-map aria-hidden="true"></canvas><script>NavitalsTrailMap.mount();</script>
-   so the map is drawn before the page's first paint and switching pages never shows the bare background.
+   Usage: <script src="trailmap.js" defer></script> in <head>, and first in <body>
+   <canvas class="trail-map" data-trail-map aria-hidden="true"></canvas>. The script mounts every such canvas
+   once the page is parsed; NavitalsTrailMap.mount() mounts any added later.
    Every visit gets a new map and new routes. Options as data attributes on the canvas:
    data-seed (pins one map, e.g. for screenshots), data-density (road spacing, px), data-speed (px/s).
-   Day or night follows the system appearance. No dependencies. */
+   Day or night follows the system appearance. With reduced motion the map and a route are drawn once and
+   nothing moves; otherwise the animation pauses while the canvas is off screen. No dependencies. */
 (function () {
   "use strict";
 
@@ -112,8 +113,13 @@
         if (i < pts.length) { const p = at(d); ctx.lineTo(p[0], p[1]); }
       };
 
+      // One frame at a time, and only while there is something to animate: none with reduced motion
+      // (each build draws once), none while the canvas is off screen.
+      let visible = true, pausedAt = 0;
+      const schedule = () => { if (!st.raf) st.raf = requestAnimationFrame(frame); };
       const frame = (now) => {
-        st.raf = requestAnimationFrame(frame);
+        st.raf = 0;
+        if (!reduce && visible) schedule();
         if (!st.wd) return;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(base, 0, 0);
@@ -155,15 +161,26 @@
 
       // Built right away, so the first frame already has the map: switching pages never shows the bare
       // background. Resizes rebuild once the size settles (and not for the observer's first report).
+      const rebuild = () => { build(); schedule(); };
       build();
       let tmr = 0;
-      const rebuildIfResized = () => { const r = canvas.getBoundingClientRect(); if (r.width !== st.w || r.height !== st.h) build(); };
+      const rebuildIfResized = () => { const r = canvas.getBoundingClientRect(); if (r.width !== st.w || r.height !== st.h) rebuild(); };
       const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { clearTimeout(tmr); tmr = setTimeout(rebuildIfResized, 120); }) : null;
       if (ro) ro.observe(canvas);
-      st.raf = requestAnimationFrame(frame);
+      // Back on screen, the route carries on where it was rather than jumping ahead by the time away.
+      const io = !reduce && typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver((entries) => {
+        const shown = entries[entries.length - 1].isIntersecting;
+        if (shown === visible) return;
+        visible = shown;
+        if (!shown) { pausedAt = performance.now(); return; }
+        st.t0 += performance.now() - pausedAt;
+        schedule();
+      }) : null;
+      if (io) io.observe(canvas);
+      schedule();
       return {
-        stop: () => { cancelAnimationFrame(st.raf); clearTimeout(tmr); if (ro) ro.disconnect(); },
-        rebuild: build
+        stop: () => { cancelAnimationFrame(st.raf); st.raf = 0; clearTimeout(tmr); if (ro) ro.disconnect(); if (io) io.disconnect(); },
+        rebuild: rebuild
       };
     }
 
@@ -579,6 +596,6 @@
   }
 
   window.NavitalsTrailMap = { TrailMap: TrailMap, mount: mountAll };
-  // Pages mount right after the canvas; this catches a page that doesn't.
+  // Deferred, this runs once the page is parsed: every canvas is there.
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountAll); else mountAll();
 })();

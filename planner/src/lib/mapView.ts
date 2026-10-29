@@ -21,7 +21,7 @@ import type { FeatureCollection } from 'geojson';
 import { distance, insertionIndex, prefix, project, stopPositions, suffix, type Coordinate } from '../core/geodesy';
 import { labelAnchors } from '../core/labels';
 import { darkStyles, styleURL } from '../mapStyles';
-import { layerIDs, nameExpression, overlayKinds, type OverlayKind } from './overlays';
+import { layerIDs, nameExpression, overlayKinds, overlaySource, type OverlayKind } from './overlays';
 import type { Stop, Zone } from './planner.svelte';
 
 maplibregl.setWorkerUrl(workerURL);
@@ -227,6 +227,12 @@ export class MapView {
   setOverlays(shown: OverlayKind[]): void {
     this.overlays = shown;
     this.applyOverlays(false);
+  }
+
+  /** The overlays asked for again, once the mirror answers after it didn't: MapLibre keeps a
+   *  source that failed to load, and its tiles, as failed. */
+  reloadOverlays(): void {
+    (this.map.getSource(overlaySource) as maplibregl.VectorTileSource | undefined)?.setUrl(`pmtiles://${overlaySource}`);
   }
 
   /** The overlays' visibility; on a style just loaded also the badge their refs sit on and their

@@ -19,8 +19,8 @@ export const overlayKinds: { id: OverlayKind; title: string }[] = [
 
 /** The R2 bucket's public address (r2.dev for now; see tools/pipelines/README.md in the app). */
 export const overlayIndex = 'https://pub-33efb55f11f54c48b6bf4a5cafb8fbf9.r2.dev/overlays/current.json';
-/** The source the styles name, as `pmtiles://` + this. */
-const sourceKey = 'route-overlays';
+/** The source the styles name, by this id and as `pmtiles://` + this. */
+export const overlaySource = 'route-overlays';
 
 /** The layers `add_overlay_layers` writes for an overlay, the name layer third. */
 export function layerIDs(kind: OverlayKind): string[] {
@@ -43,30 +43,42 @@ const protocol = new Protocol();
 let wanted: () => void = () => {};
 const firstWanted = new Promise<void>((resolve) => (wanted = resolve));
 
-/** Whether the mirror answered, once an overlay was first turned on. */
-const ready: Promise<boolean> = firstWanted.then(async () => {
-  try {
-    const response = await fetch(overlayIndex);
-    const entry = response.ok ? ((await response.json()) as { url?: string }) : null;
-    if (!entry?.url) return false;
-    const file = new FetchSource(entry.url);
-    // Filed under the name the styles use, so they need no rewriting when a new build comes.
-    protocol.add(new PMTiles({ getKey: () => sourceKey, getBytes: (...args) => file.getBytes(...args) }));
-    return true;
-  } catch {
-    return false;
-  }
-});
+/** Whether the mirror answered: asked once an overlay is turned on, and again at the next turn on
+ *  after it didn't. */
+let mirror: Promise<boolean> | null = null;
+
+function askMirror(): Promise<boolean> {
+  mirror ??= (async () => {
+    try {
+      const response = await fetch(overlayIndex);
+      const entry = response.ok ? ((await response.json()) as { url?: string }) : null;
+      if (!entry?.url) return false;
+      const file = new FetchSource(entry.url);
+      // Filed under the name the styles use, so they need no rewriting when a new build comes.
+      protocol.add(new PMTiles({ getKey: () => overlaySource, getBytes: (...args) => file.getBytes(...args) }));
+      return true;
+    } catch {
+      return false;
+    }
+  })().then((answered) => {
+    if (!answered) mirror = null;
+    return answered;
+  });
+  return mirror;
+}
 
 maplibregl.addProtocol('pmtiles', async (params, abort) => {
-  if (!(await ready)) throw new Error('The route overlays are unavailable.');
+  await firstWanted;
+  if (!(await (mirror ?? false))) throw new Error('The route overlays are unavailable.');
   return protocol.tile(params, abort);
 });
 
-/** An overlay was turned on: the mirror is asked, once. Resolves to whether it can be shown. */
+/** An overlay was turned on: the mirror is asked, unless it answered already. Resolves to whether
+ *  it can be shown. */
 export function loadOverlays(): Promise<boolean> {
+  const answer = askMirror();
   wanted();
-  return ready;
+  return answer;
 }
 
 const storageKey = 'navitals-planner-overlays';

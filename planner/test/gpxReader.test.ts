@@ -109,6 +109,16 @@ describe('GPX import', () => {
     expect(track.elevations).toEqual([34.5, 36]);
   });
 
+  test("a point off the globe, or with an empty latitude, isn't read as anywhere", () => {
+    for (const [lat, lon] of [['95', '13.37'], ['52.51', '-181'], ['', '13.37'], [' ', '13.37'], ['north', '13.37']]) {
+      const line = `<trk><trkseg><trkpt lat="${lat}" lon="${lon}"/><trkpt lat="52.52" lon="13.38"/></trkseg></trk>`;
+      expect(() => parseGPX(gpx(line)), `${lat},${lon}`).toThrow(/off the globe/);
+      const plan = `<rte><rtept lat="${lat}" lon="${lon}"/><rtept lat="52.52" lon="13.38"/></rte>`;
+      expect(() => parseGPX(gpx(plan)), `${lat},${lon}`).toThrow(/off the globe/);
+    }
+    expect(() => parseGPX(gpx('<trk><trkseg><trkpt lat="52.51" lon="13.37"/><trkpt lat="-90" lon="180"/></trkseg></trk>'))).not.toThrow();
+  });
+
   test('several segments join into one track; elevation is dropped unless every point has it', () => {
     const track = parseGPX(gpx(`<trk><trkseg><trkpt lat="52.51" lon="13.37"><ele>30</ele></trkpt></trkseg>
       <trkseg><trkpt lat="52.52" lon="13.38"/><trkpt lat="52.53" lon="13.39"><ele>31</ele></trkpt></trkseg></trk>`));

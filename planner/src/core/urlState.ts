@@ -8,7 +8,7 @@
 // Points have no names, so links stay short; search names them again when the link opens.
 
 import type { AvoidArea } from './brouter';
-import type { Coordinate } from './geodesy';
+import { isCoordinate, type Coordinate } from './geodesy';
 import { sports, ways, type Sport, type Way } from './route';
 
 export const routeParameter = 'route';
@@ -55,10 +55,6 @@ export function decodePlan(text: string): PlanState | null {
  *  reads as 0). Anything else is NaN. */
 function number(text: string | undefined): number {
   return text !== undefined && /^-?\d+(\.\d+)?$/.test(text) ? Number(text) : NaN;
-}
-
-function isCoordinate(latitude: number, longitude: number): boolean {
-  return Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
 }
 
 /** The circles of `avoid`, or none if any of them isn't one: a route that avoids only some of

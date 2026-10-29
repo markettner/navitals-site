@@ -6,7 +6,7 @@ import { BRouterClient } from '../core/brouterClient';
 import { localBRouter } from '../core/localBRouter';
 import type { AvoidArea, Track } from '../core/brouter';
 import { climbing, distance, length, project, type Coordinate } from '../core/geodesy';
-import { avoidZone, failure, planEdit, summary } from '../core/penEdit';
+import { avoidZone, failure, OutOfRequests, planEdit, summary } from '../core/penEdit';
 import { contains, cumulativeDistances, interpret } from '../core/penStroke';
 import { isLoop, sportOf, stopsOf, thinned, unnamed, type GPXTrack, type NamedPoint } from '../core/gpxReader';
 import { sports, type Sport, type Way, type Waypoint } from '../core/route';
@@ -98,6 +98,10 @@ export const mostShapingPoints = 80;
  *  three seconds went through and the 17th was refused; one every three seconds, the 16th was; a
  *  fit a minute after 14 other requests had its 13th refused. */
 export const brouterRequestsPerMinute = 12;
+/** The requests no one waits for — alternatives, a pen edit's further tries — go out only while
+ *  fewer than this went out in the last minute, so the rest of the minute is left for the next
+ *  plan the rider asks for. */
+export const backgroundRequestsPerMinute = 8;
 /** The most requests fitting a line may make, the profile's upload included. Adding shaping points
  *  takes 9–10 for the Mauerweg (165 km, 13 stops) and the Königs Wusterhausen loop (60 km, 12
  *  stops); the rest go to taking out the ones not needed, and a fit out of requests keeps them. */
@@ -509,7 +513,10 @@ export class Planner {
     this.wantedAlternative = state.alternative;
     this.linkedRoute = state.alternative;
     this.plan();
-    for (const stop of this.stops) this.name(stop.id, stop.place!);
+    // The stops at once; the shaping points one a second, as a link may hold 200 and Photon closes
+    // the connection after about 30 lookups in a row.
+    for (const stop of this.stops) if (stop.kind === 'stop') this.name(stop.id, stop.place!);
+    this.nameSlowly(this.stops.filter((stop) => stop.kind === 'shaping').map((stop) => stop.id));
   }
 
   /** A GPX file, by docs/ROUTE_GPX.md: a plan is planned again through its points, for its sport
@@ -706,9 +713,10 @@ export class Planner {
     const router = (waypoints: Waypoint[], avoid: AvoidArea[], signal?: AbortSignal) =>
       this.client.route(waypoints, this.sport, { avoid, without: this.without, signal });
     const stillCurrent = () => this.penRequest === request && this.route.status === 'ready' && this.route.track === track;
+    const mayRoute = () => this.requestsThisMinute() < backgroundRequestsPerMinute;
     try {
       if (edit.kind === 'avoidZone') {
-        const result = await avoidZone(edit.polygon, track, this.avoid, router, request.signal);
+        const result = await avoidZone(edit.polygon, track, this.avoid, router, request.signal, mayRoute);
         if (!stillCurrent()) return;
         this.record(before);
         this.zones = [...this.zones, { id: nextID++, outline: edit.polygon, circles: result.circles }];
@@ -721,15 +729,16 @@ export class Planner {
         this.penStatus = { kind: 'applied', text: summary(edit, result.track.length - track.length) };
         return;
       }
-      const result = await planEdit(edit, stroke, track, this.avoid, router, request.signal);
+      const result = await planEdit(edit, stroke, track, this.avoid, router, request.signal, mayRoute);
       if (!stillCurrent()) return;
       this.record(before);
       this.avoid = [...this.avoid, ...result.avoid];
       this.followLine(result.track, result.removed, null);
       this.penStatus = { kind: 'applied', text: summary(edit, result.track.length - track.length) };
-    } catch {
+    } catch (error) {
       if (request.signal.aborted || this.penRequest !== request) return;
-      this.penStatus = { kind: 'failed', text: failure(edit) };
+      const busy = error instanceof OutOfRequests || (error instanceof Error && /retry later/i.test(error.message));
+      this.penStatus = { kind: 'failed', text: busy ? messageFor(error) : failure(edit) };
     } finally {
       if (this.penRequest === request) this.penRequest = null;
     }
@@ -741,8 +750,12 @@ export class Planner {
   private followLine(track: Track, removed: [number, number] | null, fenced: Coordinate[] | null): void {
     const old = this.route.status === 'ready' ? this.route.track.coordinates : [];
     const name = this.title;
+    // The ends are the first and last stops with a place, as the route was planned from them: an
+    // empty start must not leave the line to begin at its destination.
+    const filled = this.stops.filter((stop) => stop.place);
+    const ends = filled.length >= 2 ? [filled[0], filled.at(-1)!] : [this.stops[0], this.stops.at(-1)!];
     const passed = this.line ? this.line.places
-      : this.stops.slice(1, -1).filter((stop) => stop.kind === 'stop' && stop.place).map((stop) => stop.place!);
+      : filled.slice(1, -1).filter((stop) => stop.kind === 'stop').map((stop) => stop.place!);
     const cumulative = cumulativeDistances(old);
     const kept = passed.filter((place) => {
       if (fenced) return !contains(fenced, place);
@@ -753,7 +766,9 @@ export class Planner {
       const along = cumulative[projection.segment] + projection.t * (cumulative[next] - cumulative[projection.segment]);
       return !(removed[0] < along && along < removed[1]);
     });
-    this.stops = [this.stops[0], this.stops.at(-1)!];
+    // A shaping point the route began or ended at is now an end of the line.
+    for (const end of ends) end.kind = 'stop';
+    this.stops = ends;
     this.line = { name, track, places: kept };
     this.showLine(this.line);
   }
@@ -839,6 +854,8 @@ export class Planner {
     (async () => {
       await rested;
       for (let alternative = 1; alternative <= alternatives; alternative++) {
+        // Alternatives are offered, not asked for: none past the minute's share for them.
+        if (this.requestsThisMinute() >= backgroundRequestsPerMinute) return;
         const track = await this.client.route(waypoints, this.sport, { alternative, avoid, without: this.without, signal });
         const route = this.route;
         if (this.request !== request || route.status !== 'ready') return;

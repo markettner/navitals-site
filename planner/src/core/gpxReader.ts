@@ -7,7 +7,7 @@
 // stops on it (`stopsOf`), which the planner then fits a plan to (`trackFit.ts`). A deliberately
 // small reader: the elements a route needs, and nothing else.
 
-import { distance, length, project, type Coordinate } from './geodesy';
+import { distance, isCoordinate, length, project, type Coordinate } from './geodesy';
 import { sportForProfile } from './brouter';
 import type { Sport, WaypointKind } from './route';
 
@@ -102,9 +102,8 @@ export function parseGPX(text: string): GPXTrack {
         case 'rte': wantsName = name === undefined; break;
         case 'metadata': inMetadata = true; metadataDepth = 0; break;
         case 'trkpt': case 'rtept': case 'wpt': {
-          const latitude = Number(token.attributes.lat), longitude = Number(token.attributes.lon);
-          if (token.attributes.lat === undefined || token.attributes.lon === undefined
-            || !Number.isFinite(latitude) || !Number.isFinite(longitude)) break;
+          const latitude = coordinate(token.attributes.lat), longitude = coordinate(token.attributes.lon);
+          if (!isCoordinate(latitude, longitude)) throw new Error(`A point at ${token.attributes.lat},${token.attributes.lon} is off the globe.`);
           pending = { latitude, longitude };
           pendingName = undefined;
           context = token.name === 'trkpt' ? 'trackPoint' : token.name === 'rtept' ? 'routePoint' : 'waypoint';
@@ -118,8 +117,8 @@ export function parseGPX(text: string): GPXTrack {
             inPlan = planPoints.length === 0;
           } else if (context === 'track' && local === 'point' && inPlan) {
             const { lat, lon, kind, name: pointName } = token.attributes;
-            const latitude = Number(lat), longitude = Number(lon);
-            if (lat === undefined || lon === undefined || !Number.isFinite(latitude) || !Number.isFinite(longitude)) break;
+            const latitude = coordinate(lat), longitude = coordinate(lon);
+            if (!isCoordinate(latitude, longitude)) throw new Error(`A plan point at ${lat},${lon} is off the globe.`);
             planPoints.push({ latitude, longitude, name: pointName || undefined, kind: kind === 'shaping' ? 'shaping' : 'stop' });
           }
       }
@@ -314,6 +313,11 @@ type Token =
 
 const tokenPattern = /<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->|<[?!][\s\S]*?>|<(\/?)([\w:.-]+)((?:\s+[\w:.-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>|([^<]+)/g;
 const attributePattern = /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+
+/** A `lat` or `lon` attribute's number; NaN when it is missing or empty, which `Number` reads as 0. */
+function coordinate(text: string | undefined): number {
+  return text === undefined || !text.trim() ? NaN : Number(text);
+}
 
 function* tokens(xml: string): Generator<Token> {
   for (const match of xml.matchAll(tokenPattern)) {

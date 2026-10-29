@@ -6,6 +6,11 @@ export interface Coordinate {
   longitude: number;
 }
 
+/** A latitude and longitude that are a place on the globe. */
+export function isCoordinate(latitude: number, longitude: number): boolean {
+  return Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+}
+
 /** Metres between two points on the WGS 84 ellipsoid, by Vincenty's inverse formula
  *  (`Geodesy.distance`). */
 export function distance(from: Coordinate, to: Coordinate): number {

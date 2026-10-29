@@ -140,6 +140,38 @@ describe('the brouter.de client', () => {
     expect((await second).length).toBe(1800);
     expect(uploads).toBe(1);
   });
+
+  test('ferries left out are taken after all when BRouter finds no route without them, and only then', async () => {
+    const answers: Record<string, () => Response> = {
+      noRoute: () => new Response('no track found at pass=0\n', { status: 400 }),
+      refused: () => new Response('Please, retry later!', { status: 403 }),
+      offMap: () => new Response('from-position not mapped in existing datafile\n', { status: 400 }),
+      bare: () => new Response('', { status: 503 }),
+    };
+    for (const [kind, refusal] of Object.entries(answers)) {
+      const brouter = server((url) => {
+        if (url.pathname.endsWith('/profile')) return uploaded('custom_1');
+        return url.searchParams.get('profile:allow_ferries') === '0' ? refusal() : new Response(straight);
+      });
+      const client = new BRouterClient({ profileText, fetch: brouter.fetch });
+      const route = client.route(points, 'road', { without: ['ferries'] });
+      if (kind === 'noRoute') expect((await route).length).toBe(1800);
+      else await expect(route).rejects.toBeDefined();
+      expect(brouter.routes(), kind).toHaveLength(kind === 'refused' || kind === 'offMap' ? 1 : 2);
+    }
+  });
+
+  test('a lost connection is not asked again without the ferries', async () => {
+    let routes = 0;
+    const fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') return uploaded('custom_1');
+      routes++;
+      throw new TypeError('Failed to fetch');
+    }) as typeof globalThis.fetch;
+    const client = new BRouterClient({ profileText, fetch });
+    await expect(client.route(points, 'road', { without: ['ferries'] })).rejects.toThrow(TypeError);
+    expect(routes).toBe(1);
+  });
 });
 
 describe('the on-device engine in front of brouter.de', () => {
