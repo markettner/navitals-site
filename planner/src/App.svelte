@@ -259,7 +259,7 @@
     const isEnd = index === 0 || index === planner.stops.length - 1;
     return [
       ...(stop.kind === 'shaping' ? [{ label: 'Make it a stop', action: () => planner.makeStop(id) }] : []),
-      ...(stop.place && !stop.current ? [{ label: 'Rename…', action: () => (planner.renaming = id) }] : []),
+      ...(stop.place && !stop.current ? [{ label: 'Rename…', action: () => planner.startRename(id) }] : []),
       ...(!isEnd ? [{ label: stop.kind === 'shaping' ? 'Remove shaping point' : 'Remove stop', destructive: true, action: () => planner.remove(id) }] : []),
     ];
   }

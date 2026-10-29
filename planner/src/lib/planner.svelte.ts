@@ -81,6 +81,15 @@ function named(point: NamedPoint): Place {
   };
 }
 
+/** Two plans through the same points, whatever they are called. */
+function sameWaypoints(a: Stop[], b: Stop[]): boolean {
+  return a.length === b.length && a.every((stop, index) => {
+    const other = b[index];
+    return stop.kind === other.kind && stop.current === other.current
+      && stop.place?.latitude === other.place?.latitude && stop.place?.longitude === other.place?.longitude;
+  });
+}
+
 /** How far a renamed stop can be dragged and still be the place it was named for (the app's
  *  `PlaceIdentity.radius`): further, it is somewhere else and has to earn a name again. */
 export const renameRadius = 25;
@@ -295,6 +304,17 @@ export class Planner {
   }
 
   private restore(snapshot: Snapshot): void {
+    // Undoing a rename changes a name and nothing BRouter is asked about: the route stays, and
+    // brouter.de isn't asked again for it.
+    const sameRoute = !snapshot.line && !this.line && this.route.status === 'ready'
+      && snapshot.sport === this.sport && snapshot.avoid === this.avoid && snapshot.without === this.without
+      && snapshot.zones === this.zones && sameWaypoints(snapshot.stops, this.stops);
+    if (sameRoute) {
+      this.stops = snapshot.stops;
+      this.planName = snapshot.planName;
+      this.renaming = null;
+      return;
+    }
     this.stopFitting();
     this.penRequest?.abort();
     this.penStatus = null;
@@ -447,6 +467,14 @@ export class Planner {
 
   /** The stop whose name is being typed in the list, from its ✎ or the map's menu. */
   renaming = $state<number | null>(null);
+  /** Counts the times renaming was asked for, so the field takes focus again even when it is
+   *  already open for that stop. */
+  renameAsked = $state(0);
+
+  startRename(id: number): void {
+    this.renaming = id;
+    this.renameAsked++;
+  }
 
   /** Names a stop or bend as the rider calls it, or gives it its own name back for a blank one.
    *  The route doesn't change, so nothing is planned again; the rename can be undone. */

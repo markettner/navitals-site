@@ -61,14 +61,17 @@
     draft = untrack(() => planner.stops.find((s) => s.id === id)?.place?.name ?? '');
   });
 
-  /** Opens with the name selected, so typing replaces it. */
-  function selectOnMount(input: HTMLInputElement) {
-    // After the frame: the draft fills the field only once it is on the page.
+  let nameInput = $state<HTMLInputElement>();
+
+  // Each time renaming is asked for, the field takes focus with the name selected, so typing
+  // replaces it — also when it was already open. After the frame: the draft fills it only then.
+  $effect(() => {
+    if (!planner.renameAsked) return;
     requestAnimationFrame(() => {
-      input.focus();
-      input.select();
+      nameInput?.focus();
+      nameInput?.select();
     });
-  }
+  });
 
   function renameKey(event: KeyboardEvent, id: number) {
     if (event.key === 'Enter') { event.preventDefault(); planner.rename(id, draft); }
@@ -93,7 +96,7 @@
       {placeholder}
       aria-label="Name"
       autocomplete="off"
-      use:selectOnMount
+      bind:this={nameInput}
       onkeydown={(event) => renameKey(event, id)}
       onblur={() => { if (planner.renaming === id) planner.rename(id, draft); }}
     />
@@ -136,7 +139,7 @@
             <span class="shaping-name" title={stop.place?.originalName ?? 'A shaping point: the route bends through it'}>{stop.place?.name ?? 'Shaping point'}</span>
             {#if stop.place}
               <button type="button" class="icon-button" title="Rename" aria-label="Rename shaping point"
-                      onclick={() => (planner.renaming = stop.id)}>✎</button>
+                      onclick={() => planner.startRename(stop.id)}>✎</button>
             {/if}
           {/if}
           <button type="button" class="icon-button" title="Make it a stop" aria-label="Make this shaping point a stop"
@@ -176,7 +179,7 @@
           {/if}
           {#if stop.place && !stop.current && planner.renaming !== stop.id}
             <button type="button" class="icon-button" title="Rename" aria-label={`Rename ${label(index).toLowerCase()}`}
-                    onclick={() => (planner.renaming = stop.id)}>✎</button>
+                    onclick={() => planner.startRename(stop.id)}>✎</button>
           {/if}
           {#if stopCount > 2 || stop.place || stop.current}
             <button type="button" class="icon-button" aria-label={`Remove ${label(index).toLowerCase()}`}
