@@ -40,6 +40,7 @@
     /* Under the status bar and the home indicator the page has the map only (viewport-fit=cover). */
     --top: calc(var(--gutter) + env(safe-area-inset-top));
     --sheet-bottom: max(var(--gutter), env(safe-area-inset-bottom));
+    --overhang: 0px;
     --field: rgba(255, 255, 255, 0.7);
     --route: #E03A3E;
     --pen: #FF9500;
@@ -77,7 +78,10 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-#map { position: absolute; top: 0; left: 0; right: 0; height: 100lvh; }
+/* Absolute, not fixed: Safari draws a fixed element only inside the viewport, but the page's own
+   content on under its floating bar. On a touch screen the map runs on below the viewport, so it
+   reaches the screen's edge under the bar (the overhang is clipped where there is no bar). */
+#map { position: absolute; top: 0; left: 0; right: 0; height: calc(100lvh + var(--overhang)); }
 /* A long press opens our menu, not the browser's text selection or image callout. */
 #map { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
@@ -446,6 +450,21 @@ body {
 
 .sheet-handle, .sheet-bar { display: none; }
 
+@media (pointer: coarse) {
+    :root { --overhang: 120px; }
+    /* The map's foot is under Safari's bar: its bottom controls are placed from there. */
+    .maplibregl-ctrl-bottom-right { bottom: var(--overhang); }
+}
+/* iOS's Safari also where it reports no touch pointer (the Simulator's). Its bar floats 16 pt
+   below the viewport's foot, so the sheet stands just above the foot. Not on it: a fixed element
+   within a pixel or so of the foot is taken for a bar, and Safari fills the area under its own bar
+   with the page's colour, hiding the map (4 px clears that). Without the bar (a Home Screen web
+   app) the home indicator's inset keeps the sheet off the edge. */
+@supports (-webkit-touch-callout: none) {
+    :root { --overhang: 120px; --sheet-bottom: max(4px, env(safe-area-inset-bottom, 0px)); }
+    .maplibregl-ctrl-bottom-right { bottom: var(--overhang); }
+}
+
 /* ---------- Phones: the card becomes a sheet at the bottom ---------- */
 @media (max-width: 640px) {
     /* The handle: a bar, with room enough round it to hit with a thumb. */
@@ -490,6 +509,9 @@ body {
         width: auto; max-height: 50%; display: block; overflow-y: auto;
     }
     .card.collapsed { padding-bottom: 12px; }
+    /* Its shadow falls upward: Safari clips a fixed element's shadow at the viewport's foot, and
+       one falling down ended in a hard line across the map above its bar. */
+    .card.glass { box-shadow: 0 -6px 28px var(--glass-shadow); }
     .card > .card-scroll { overflow-y: visible; }
     /* The toolbar takes the top left. */
     .toolbar { left: var(--gutter); }

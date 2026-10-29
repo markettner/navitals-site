@@ -63,10 +63,24 @@
   // bar, the route's numbers (or Search) and an X that throws the plan away, so the map has the
   // screen. A tap on the handle toggles it, a swipe sets it.
   let collapsed = $state(false);
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  /** Puts the sheet away or brings it up, its height easing from one to the other as the app's
+   *  drawer does, and its contents fading in. Done once the sheet has its new height. */
+  function setCollapsed(next: boolean): Promise<void> {
+    if (next === collapsed) return Promise.resolve();
+    const from = card.offsetHeight;
+    flushSync(() => (collapsed = next));
+    const to = card.offsetHeight;
+    if (reduceMotion.matches || from === to) return Promise.resolve();
+    const timing = { duration: 320, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' };
+    for (const child of card.children) child.animate([{ opacity: 0 }, { opacity: 1 }], { ...timing, duration: 220 });
+    return card.animate([{ height: `${from}px`, overflow: 'hidden' }, { height: `${to}px`, overflow: 'hidden' }], timing)
+      .finished.then(() => undefined, () => undefined);
+  }
   /** The put-away sheet's bar, tapped: the sheet comes up, and with no plan yet its field takes
    *  the keyboard, inside the tap, as iOS wants. */
   function expandSheet() {
-    flushSync(() => (collapsed = false));
+    setCollapsed(false);
     if (planner.isEmpty) card.querySelector<HTMLInputElement>('.stop-field input')?.focus();
   }
   let swipeFrom: number | null = null;
@@ -78,7 +92,7 @@
     if (swipeFrom === null) return;
     const moved = event.clientY - swipeFrom;
     swipeFrom = null;
-    collapsed = moved > 24 ? true : moved < -24 ? false : !collapsed;
+    setCollapsed(moved > 24 ? true : moved < -24 ? false : !collapsed);
   }
 
   /** The pen is out: strokes on the map edit the route (`Planner.draw`). */
@@ -98,9 +112,10 @@
     drawing = true;
     menu = null;
     // The map is what is being drawn on: on a phone the sheet goes down, and the whole route shows.
-    if (window.innerWidth <= 640) collapsed = true;
+    const down = window.innerWidth <= 640 ? setCollapsed(true) : Promise.resolve();
     // Once the sheet is down and the pen bar up, so the route is framed in the map that is left. The
     // bar sits on the sheet's measured height, which the ResizeObserver sets a frame later.
+    await down;
     await tick();
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const route = planner.route;
@@ -171,9 +186,10 @@
     resize.observe(mapElement);
     // The map is taller than the window, so iOS has a page to scroll a field above its keyboard,
     // leaves it scrolled once the keyboard goes, and Safari brings the scroll back on a reload.
-    // Without a field in use, the page stays at the top.
+    // Without a field in use, the page goes back to its top: only from below it, as Safari's
+    // "Open in the Navitals app" banner sits above the top, and scrolling to 0 hid it.
     const settle = () => requestAnimationFrame(() => {
-      if (!document.activeElement?.matches('input, textarea') && window.scrollY) window.scrollTo(0, 0);
+      if (!document.activeElement?.matches('input, textarea') && window.scrollY > 0) window.scrollTo(0, 0);
     });
     settle();
     window.addEventListener('scroll', settle);
@@ -271,7 +287,7 @@
     const foot = mapElement.getBoundingClientRect().bottom;
     const clear = (bottom: number) => (bar ? Math.max(bottom, foot - bar.top + 24) : bottom);
     return window.innerWidth > 640
-      ? { top: 72, bottom: clear(48), left: box.right + 32, right: 72 }
+      ? { top: 72, bottom: clear(48 + Math.max(0, foot - window.innerHeight)), left: box.right + 32, right: 72 }
       : { top: 72, bottom: clear(foot - box.top + 24), left: 32, right: 72 };
   }
 
@@ -401,7 +417,7 @@
 <aside class="card glass" class:collapsed aria-label="Route planner" bind:this={card}>
   <button type="button" class="sheet-handle" aria-label={collapsed ? 'Show the planner' : 'Put the planner away'}
           aria-expanded={!collapsed} onpointerdown={handleDown} onpointerup={handleUp}
-          onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); collapsed = !collapsed; } }}></button>
+          onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setCollapsed(!collapsed); } }}></button>
   <div class="sheet-bar">
     <button type="button" class="sheet-search" onclick={expandSheet}>
       {#if planner.isEmpty}
