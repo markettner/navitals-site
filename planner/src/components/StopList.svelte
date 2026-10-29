@@ -5,6 +5,7 @@
   //
   // An empty plan is one field, as the app starts: what is picked there is where to go, and the
   // start is the rider's location. The list, Add Stop and ⇅ come with the destination.
+  import { untrack } from 'svelte';
   import type { Coordinate } from '../core/geodesy';
   import { stopRows } from '../core/stopRows';
   import type { Planner } from '../lib/planner.svelte';
@@ -52,12 +53,52 @@
     return `Stop ${stopNumber(index)}`;
   }
 
+  /** The name being typed for the stop in `planner.renaming`. Blank gives it its own name back. */
+  let draft = $state('');
+  // Filled when renaming starts, and only then: a late lookup naming the stop mustn't wipe what is typed.
+  $effect(() => {
+    const id = planner.renaming;
+    draft = untrack(() => planner.stops.find((s) => s.id === id)?.place?.name ?? '');
+  });
+
+  /** Opens with the name selected, so typing replaces it. */
+  function selectOnMount(input: HTMLInputElement) {
+    // After the frame: the draft fills the field only once it is on the page.
+    requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+  }
+
+  function renameKey(event: KeyboardEvent, id: number) {
+    if (event.key === 'Enter') { event.preventDefault(); planner.rename(id, draft); }
+    else if (event.key === 'Escape') { event.preventDefault(); planner.renaming = null; }
+  }
+
   function drop(index: number) {
     if (dragging !== null && dragging !== index) planner.reorder(dragging, index);
     dragging = null;
     over = null;
   }
 </script>
+
+<!-- A stop's own name, typed in place of its search field: Enter or leaving it keeps the name,
+     Escape doesn't. The placeholder is what the place is really called, which a blank name goes back to. -->
+{#snippet nameField(id: number, placeholder: string)}
+  <div class="stop-field">
+    <input
+      type="text"
+      class="name-field"
+      bind:value={draft}
+      {placeholder}
+      aria-label="Name"
+      autocomplete="off"
+      use:selectOnMount
+      onkeydown={(event) => renameKey(event, id)}
+      onblur={() => { if (planner.renaming === id) planner.rename(id, draft); }}
+    />
+  </div>
+{/snippet}
 
 {#if planner.isEmpty}
 <div class="stops">
@@ -89,7 +130,15 @@
       {:else if stop.kind === 'shaping'}
         <li class="stop-row shaping-row">
           <span class="stop-icon shaping" aria-hidden="true"></span>
-          <span class="shaping-name" title="A shaping point: the route bends through it">{stop.place?.name ?? 'Shaping point'}</span>
+          {#if planner.renaming === stop.id}
+            {@render nameField(stop.id, stop.place?.originalName ?? 'Name')}
+          {:else}
+            <span class="shaping-name" title={stop.place?.originalName ?? 'A shaping point: the route bends through it'}>{stop.place?.name ?? 'Shaping point'}</span>
+            {#if stop.place}
+              <button type="button" class="icon-button" title="Rename" aria-label="Rename shaping point"
+                      onclick={() => (planner.renaming = stop.id)}>✎</button>
+            {/if}
+          {/if}
           <button type="button" class="icon-button" title="Make it a stop" aria-label="Make this shaping point a stop"
                   onclick={() => planner.makeStop(stop.id)}>◎</button>
           <button type="button" class="icon-button" aria-label="Remove shaping point" onclick={() => planner.remove(stop.id)}>✕</button>
@@ -110,6 +159,9 @@
             class:current={stop.current}
             aria-hidden="true"
           >{#if stop.current}<Icon name="navigation" size={11} />{:else if index > 0 && index < planner.stops.length - 1}{stopNumber(index)}{/if}</span>
+          {#if planner.renaming === stop.id}
+            {@render nameField(stop.id, stop.place?.originalName ?? label(index))}
+          {:else}
           <StopField
             place={stop.place}
             current={stop.current}
@@ -121,6 +173,11 @@
             onclear={() => planner.setPlace(stop.id, null)}
             onmylocation={() => planner.useMyLocation(stop.id)}
           />
+          {/if}
+          {#if stop.place && !stop.current && planner.renaming !== stop.id}
+            <button type="button" class="icon-button" title="Rename" aria-label={`Rename ${label(index).toLowerCase()}`}
+                    onclick={() => (planner.renaming = stop.id)}>✎</button>
+          {/if}
           {#if stopCount > 2 || stop.place || stop.current}
             <button type="button" class="icon-button" aria-label={`Remove ${label(index).toLowerCase()}`}
                     onclick={() => planner.remove(stop.id)}>✕</button>

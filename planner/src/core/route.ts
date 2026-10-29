@@ -25,5 +25,7 @@ export type WaypointKind = 'stop' | 'shaping' | 'place';
 
 export interface Waypoint extends Coordinate {
   name?: string;
+  /** The place's own name when `name` is the rider's. */
+  originalName?: string;
   kind: WaypointKind;
 }

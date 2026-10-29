@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Navitals" xmlns="http://www.topografix.com/GPX/1/1"
+     xmlns:navitals="https://navitals.kettner.berlin/xmlschemas/gpx/1">
+  <metadata>
+    <name>Home to Müggelsee</name>
+    <extensions><navitals:profile>gravel</navitals:profile></extensions>
+  </metadata>
+  <wpt lat="52.5219184" lon="13.4132147"><name>Home</name><desc>Alexanderplatz</desc></wpt>
+  <wpt lat="52.4880000" lon="13.4720000"><name>Picnic</name><desc>Treptower Park</desc></wpt>
+  <wpt lat="52.4400000" lon="13.6450000"><name>Müggelsee</name></wpt>
+  <trk>
+    <name>Home to Müggelsee</name>
+    <type>gravel</type>
+    <extensions>
+      <navitals:plan>
+        <navitals:point lat="52.5219184" lon="13.4132147" kind="via" name="Home" original-name="Alexanderplatz"/>
+        <navitals:point lat="52.4930000" lon="13.4590000" kind="shaping" name="Puschkinallee"/>
+        <navitals:point lat="52.4880000" lon="13.4720000" kind="via" name="Picnic" original-name="Treptower Park"/>
+        <navitals:point lat="52.4600000" lon="13.5300000" kind="shaping" name="An der Wuhlheide"/>
+        <navitals:point lat="52.4400000" lon="13.6450000" kind="via" name="Müggelsee"/>
+      </navitals:plan>
+    </extensions>
+    <trkseg>
+      <trkpt lat="52.5219184" lon="13.4132147"/>
+      <trkpt lat="52.5050000" lon="13.4400000"/>
+      <trkpt lat="52.4930000" lon="13.4590000"/>
+      <trkpt lat="52.4880000" lon="13.4720000"/>
+      <trkpt lat="52.4600000" lon="13.5300000"/>
+      <trkpt lat="52.4500000" lon="13.5900000"/>
+      <trkpt lat="52.4400000" lon="13.6450000"/>
+    </trkseg>
+  </trk>
+</gpx>

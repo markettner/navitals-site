@@ -13,6 +13,8 @@ import type { Sport, WaypointKind } from './route';
 
 export interface NamedPoint extends Coordinate {
   name: string;
+  /** A plan point's `original-name`: its own name, where `name` is the rider's. */
+  originalName?: string;
 }
 
 export interface PlannedPoint extends NamedPoint {
@@ -59,6 +61,7 @@ export const unnamed = 'Imported route';
 interface Point extends Coordinate {
   elevation?: number;
   name?: string;
+  originalName?: string;
   kind?: 'stop' | 'shaping';
 }
 
@@ -116,10 +119,11 @@ export function parseGPX(text: string): GPXTrack {
           } else if (context === 'track' && local === 'plan') {
             inPlan = planPoints.length === 0;
           } else if (context === 'track' && local === 'point' && inPlan) {
-            const { lat, lon, kind, name: pointName } = token.attributes;
+            const { lat, lon, kind, name: pointName, 'original-name': originalName } = token.attributes;
             const latitude = coordinate(lat), longitude = coordinate(lon);
             if (!isCoordinate(latitude, longitude)) throw new Error(`A plan point at ${lat},${lon} is off the globe.`);
-            planPoints.push({ latitude, longitude, name: pointName || undefined, kind: kind === 'shaping' ? 'shaping' : 'stop' });
+            planPoints.push({ latitude, longitude, name: pointName || undefined, originalName: pointName && originalName || undefined,
+                              kind: kind === 'shaping' ? 'shaping' : 'stop' });
           }
       }
       if (!token.selfClosing) continue;
@@ -207,6 +211,7 @@ export function parseGPX(text: string): GPXTrack {
       return {
         latitude: point.latitude, longitude: point.longitude, kind,
         name: point.name || (kind === 'shaping' ? 'Shaping point' : `Point ${index + 1}`),
+        ...(point.originalName ? { originalName: point.originalName } : {}),
       };
     }) : null,
     profile,

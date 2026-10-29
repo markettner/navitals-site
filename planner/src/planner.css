@@ -185,6 +185,7 @@ body {
     padding: 9px 12px; border-radius: 12px; border: 1px solid var(--chip-line); background: var(--field);
 }
 .stop-field input::placeholder { color: var(--muted); }
+.shaping-row .stop-field input { padding: 5px 10px; font-size: 15px; }
 .stop-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 .stop-field input::-webkit-search-cancel-button { display: none; }
 

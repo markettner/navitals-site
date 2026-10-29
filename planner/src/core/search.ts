@@ -12,9 +12,27 @@ export interface Place extends Coordinate {
   /** OSM's object as `N:123` / `W:123` / `R:123`, the same from both sources, or the point itself. */
   id: string;
   name: string;
+  /** What search called it, kept when the rider renamed it (the app's `Place.originalName`). */
+  originalName?: string;
   /** The most specific locator first, never repeating the name. */
   subtitle: string;
   kind: 'street' | 'address' | 'other';
+}
+
+/** The same place under the rider's name, or back under its own for a blank one (the app's
+ *  `Place.renamed`). "My Location" is the name a saved route reopens as the rider's position, so
+ *  it can't be a stop's own name. */
+export function renamed(place: Place, name: string): Place {
+  const original = place.originalName ?? place.name;
+  const trimmed = name.trim();
+  const custom = trimmed && trimmed !== original && trimmed !== myLocationName ? trimmed : undefined;
+  const { originalName: _, ...rest } = place;
+  return custom ? { ...rest, name: custom, originalName: original } : { ...rest, name: original };
+}
+
+/** A place named again by search, keeping the rider's name for it if they gave one (`Place.geocoded`). */
+export function geocoded(current: Place, found: Place): Place {
+  return current.originalName ? renamed(found, current.name) : found;
 }
 
 /** The rider's own position as a stop: the app's `RouteStop.currentLocationName`. */

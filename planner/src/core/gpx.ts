@@ -30,6 +30,8 @@ export function writeRoute(name: string, sport: Sport, coordinates: Coordinate[]
     if (waypoint.kind === 'shaping') continue;
     gpx += `  <wpt lat="${coordinate(waypoint.latitude)}" lon="${coordinate(waypoint.longitude)}">`;
     if (waypoint.name !== undefined) gpx += `<name>${escape(waypoint.name)}</name>`;
+    // Named by the rider, a point still says what it is to a reader that shows only GPX.
+    if (waypoint.originalName !== undefined) gpx += `<desc>${escape(waypoint.originalName)}</desc>`;
     gpx += '</wpt>\n';
   }
   gpx += `  <trk>
@@ -44,6 +46,7 @@ export function writeRoute(name: string, sport: Sport, coordinates: Coordinate[]
       const kind = point.kind === 'shaping' && !isEnd ? 'shaping' : 'via';
       gpx += `        <navitals:point lat="${coordinate(point.latitude)}" lon="${coordinate(point.longitude)}" kind="${kind}"`;
       if (point.name !== undefined) gpx += ` name="${escape(point.name)}"`;
+      if (point.originalName !== undefined) gpx += ` original-name="${escape(point.originalName)}"`;
       gpx += '/>\n';
     });
     gpx += '      </navitals:plan>\n    </extensions>\n';

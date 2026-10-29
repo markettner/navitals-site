@@ -162,6 +162,7 @@
     value={shown}
     {placeholder}
     aria-label={placeholder}
+    title={place?.originalName}
     role="combobox"
     aria-expanded={open}
     aria-controls={listID}

@@ -12,7 +12,7 @@ import { isLoop, sportOf, stopsOf, thinned, unnamed, type GPXTrack, type NamedPo
 import { sports, type Sport, type Way, type Waypoint } from '../core/route';
 import { routeStretches, StretchCache, stretchContext } from '../core/stretches';
 import { fitTrack } from '../core/trackFit';
-import { myLocationName, PlaceSearch, SearchUnavailable, type Place } from '../core/search';
+import { geocoded, myLocationName, PlaceSearch, renamed, SearchUnavailable, type Place } from '../core/search';
 import type { PlanState } from '../core/urlState';
 
 export interface Stop {
@@ -75,7 +75,22 @@ export function droppedPin(point: Coordinate, kind: Stop['kind'] = 'stop'): Plac
 }
 
 function named(point: NamedPoint): Place {
-  return { id: `gpx:${point.latitude},${point.longitude}`, name: point.name, subtitle: '', latitude: point.latitude, longitude: point.longitude, kind: 'other' };
+  return {
+    id: `gpx:${point.latitude},${point.longitude}`, name: point.name, subtitle: '', latitude: point.latitude, longitude: point.longitude, kind: 'other',
+    ...(point.originalName ? { originalName: point.originalName } : {}),
+  };
+}
+
+/** How far a renamed stop can be dragged and still be the place it was named for (the app's
+ *  `PlaceIdentity.radius`): further, it is somewhere else and has to earn a name again. */
+export const renameRadius = 25;
+
+/** A point for the route as the app saves one: its name, and its own beside it when renamed. */
+function waypoint(place: Place, kind: Waypoint['kind']): Waypoint {
+  return {
+    latitude: place.latitude, longitude: place.longitude, name: place.name, kind,
+    ...(place.originalName ? { originalName: place.originalName } : {}),
+  };
 }
 
 /** How many alternatives to ask for beyond the best route, as the app does (`RouteOptions`). */
@@ -218,16 +233,14 @@ export class Planner {
 
   /** The stops and shaping points that are filled in, as BRouter is asked for them. */
   get waypoints(): Waypoint[] {
-    return this.stops.flatMap((stop) => stop.place
-      ? [{ latitude: stop.place.latitude, longitude: stop.place.longitude, name: stop.place.name, kind: stop.kind }]
-      : []);
+    return this.stops.flatMap((stop) => stop.place ? [waypoint(stop.place, stop.kind)] : []);
   }
 
   /** The points a GPX export lists: the plan, or for a line its ends and the places it passes. */
   get exportWaypoints(): Waypoint[] {
     if (!this.line) return this.waypoints;
     const [start, ...rest] = this.waypoints;
-    const places = this.line.places.map((place) => ({ latitude: place.latitude, longitude: place.longitude, name: place.name, kind: 'place' as const }));
+    const places = this.line.places.map((place) => waypoint(place, 'place'));
     return [start, ...places, ...rest.slice(-1)];
   }
 
@@ -423,10 +436,30 @@ export class Planner {
     const stop = this.stops.find((s) => s.id === id);
     if (!stop) return;
     this.record();
+    const before = stop.place;
     stop.place = droppedPin(point, stop.kind);
+    // Nudged, a renamed stop is still the place it was named for.
+    if (before?.originalName && distance(before, point) < renameRadius) stop.place = renamed(stop.place, before.name);
     stop.current = false;
     this.plan();
     this.name(id, point);
+  }
+
+  /** The stop whose name is being typed in the list, from its ✎ or the map's menu. */
+  renaming = $state<number | null>(null);
+
+  /** Names a stop or bend as the rider calls it, or gives it its own name back for a blank one.
+   *  The route doesn't change, so nothing is planned again; the rename can be undone. */
+  rename(id: number, name: string): void {
+    const stop = this.stops.find((s) => s.id === id);
+    this.renaming = null;
+    if (!stop?.place || stop.current) return;
+    const place = renamed(stop.place, name);
+    if (place.name === stop.place.name && place.originalName === stop.place.originalName) return;
+    const snapshot = this.snapshot();
+    this.past = [...this.past.slice(-99), snapshot];
+    this.future = [];
+    stop.place = place;
   }
 
   /** A bend promoted to a stop: the same spot and name, now arrived at. */
@@ -888,7 +921,8 @@ export class Planner {
     const stop = this.stops.find((s) => s.id === id);
     // Only if the stop is still that point: it may have been moved or cleared meanwhile.
     if (!place || !stop?.place || stop.place.latitude !== point.latitude || stop.place.longitude !== point.longitude) return;
-    stop.place = { ...place, latitude: point.latitude, longitude: point.longitude };
+    // A name the rider gave while the lookup was on its way stays theirs.
+    stop.place = geocoded(stop.place, { ...place, latitude: point.latitude, longitude: point.longitude });
   }
 }
 
