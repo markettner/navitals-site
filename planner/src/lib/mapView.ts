@@ -73,6 +73,8 @@ export interface MapEvents {
   centered: (centered: boolean) => void;
   /** The map moved, so a menu over it is no longer where it pointed. */
   moved: () => void;
+  /** The rider moved or clicked the map (not a move of ours). */
+  touched: () => void;
 }
 
 interface Placed {
@@ -84,6 +86,8 @@ interface Placed {
 export class MapView {
   readonly map: maplibregl.Map;
   private shownStyle: string;
+  /** The style's ground colour by zoom, lowest zoom first, for the page round the map. */
+  private ground: [number, string][] = [];
   private line: Coordinate[] = [];
   /** Every route found, and which is the chosen one (`line`). */
   private routes: Coordinate[][] = [];
@@ -120,7 +124,8 @@ export class MapView {
   private stroke: { pixels: { x: number; y: number }[]; coordinates: Coordinate[] | null } | null = null;
   private readonly strokeLayer: SVGPolylineElement;
 
-  constructor(container: HTMLElement, style: string, private readonly events: MapEvents) {
+  /** `credits`: the page's own credits (Credits.svelte), placed where MapLibre's would be. */
+  constructor(container: HTMLElement, style: string, private readonly events: MapEvents, credits: HTMLElement) {
     this.shownStyle = style;
     this.map = new maplibregl.Map({
       container,
@@ -133,35 +138,27 @@ export class MapView {
     });
     this.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
     this.map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
-    // The privacy policy beside the credits, always shown, as Apple Maps' Legal is. Bottom controls
-    // go in first-added-last, so added before the credits it ends up on their left.
-    const privacy = document.createElement('div');
-    privacy.className = 'maplibregl-ctrl privacy-ctrl';
-    privacy.innerHTML = '<a href="../privacy_policy.html#web-planner">Privacy</a>';
-    this.map.addControl({ onAdd: () => privacy, onRemove: () => privacy.remove() }, 'bottom-right');
-    // OpenFreeMap's TileJSON brings OpenMapTiles and OpenStreetMap, the hillshade source names
-    // Mapzen and AWS, BRouter routes. The Natural Earth relief at low zooms names nobody.
-    this.map.addControl(new maplibregl.AttributionControl({
-      compact: true,
-      customAttribution: [
-        '<a href="https://www.naturalearthdata.com" target="_blank" rel="noopener">Natural Earth</a>',
-        'Routes <a href="https://brouter.de" target="_blank" rel="noopener">BRouter</a>',
-      ],
-    }), 'bottom-right');
+    // Our credits instead of MapLibre's: every style has the same sources, and MapLibre's box,
+    // open at the start, took a phone's width in three lines.
+    this.map.addControl({ onAdd: () => credits, onRemove: () => credits.remove() }, 'bottom-right');
 
     // A new style starts without our layers, so they go back in each time one loads.
     this.map.on('style.load', () => {
       this.addRouteLayers();
       this.applyOverlays(true);
+      this.ground = groundStops(this.map.getStyle().layers);
+      this.paintPage();
     });
+    this.map.on('zoomend', () => this.paintPage());
     this.map.on('contextmenu', (event) => {
       event.preventDefault();
       this.menuOpenedAt = Date.now();
       this.events.contextMenu({ latitude: event.lngLat.lat, longitude: event.lngLat.lng }, event.point);
     });
     this.watchLongPress();
-    this.map.on('movestart', () => {
+    this.map.on('movestart', (event) => {
       this.events.moved();
+      if (event.originalEvent) this.events.touched();
       if (this.easingToRider || !this.following) return;
       this.following = false;
       this.events.centered(false);
@@ -169,7 +166,10 @@ export class MapView {
     this.map.on('mousemove', (event) => this.pointerMoved(event));
     this.map.on('mousedown', (event) => this.pointerDown(event));
     this.map.on('mouseup', (event) => this.pointerUp(event));
-    this.map.on('click', (event) => this.clicked(event));
+    this.map.on('click', (event) => {
+      this.events.touched();
+      this.clicked(event);
+    });
     this.map.getCanvasContainer().addEventListener('mouseleave', () => { if (!this.pulling) this.setGhost(null); });
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -185,6 +185,14 @@ export class MapView {
       this.stroke.pixels = this.stroke.coordinates.map((c) => this.map.project([c.longitude, c.latitude]));
       this.drawStroke();
     });
+  }
+
+  /** Safari leaves the strips under the status bar and the home indicator to the page, which the
+   *  map can't reach: they take the map's ground, so the map seems to run on under them. */
+  private paintPage(): void {
+    const zoom = this.map.getZoom();
+    const colour = this.ground.filter(([from]) => from <= zoom).at(-1)?.[1] ?? this.ground[0]?.[1];
+    if (colour) document.body.style.backgroundColor = colour;
   }
 
   setStyle(style: string): void {
@@ -771,4 +779,18 @@ function pointFeature(point: Coordinate, properties: Record<string, number> = {}
   return { type: 'FeatureCollection', features: [{
     type: 'Feature', properties, geometry: { type: 'Point', coordinates: [point.longitude, point.latitude] },
   }] };
+}
+
+/** A style's background colour, as fixed stops by zoom: one colour, or an interpolation's stops
+ *  (taken as steps, near enough for a strip of page). */
+function groundStops(layers: maplibregl.LayerSpecification[]): [number, string][] {
+  const layer = layers.find((l): l is maplibregl.BackgroundLayerSpecification => l.type === 'background');
+  const colour: unknown = layer?.paint?.['background-color'];
+  if (typeof colour === 'string') return [[0, colour]];
+  if (!Array.isArray(colour) || colour[0] !== 'interpolate') return [];
+  const stops: [number, string][] = [];
+  for (let i = 3; i + 1 < colour.length; i += 2) {
+    if (typeof colour[i] === 'number' && typeof colour[i + 1] === 'string') stops.push([colour[i], colour[i + 1]]);
+  }
+  return stops;
 }

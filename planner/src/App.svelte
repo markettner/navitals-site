@@ -1,7 +1,7 @@
 <script lang="ts">
   // The planner: a full-window map with the card at the leading edge (a sheet at the bottom on a
   // phone), as the app lays out iPad and Mac.
-  import { onMount, tick } from 'svelte';
+  import { flushSync, onMount, tick } from 'svelte';
   import type { Coordinate } from './core/geodesy';
   import { fileName, writeRoute } from './core/gpx';
   import { GPXError, parseGPX } from './core/gpxReader';
@@ -13,6 +13,7 @@
   import { Planner } from './lib/planner.svelte';
   import { loadChoice, saveChoice, wantsDark, type MapChoice } from './mapStyles';
   import ContextMenu from './components/ContextMenu.svelte';
+  import Credits from './components/Credits.svelte';
   import ElevationProfile from './components/ElevationProfile.svelte';
   import Icon from './components/Icon.svelte';
   import LineRoute from './components/LineRoute.svelte';
@@ -35,6 +36,9 @@
   });
   let view: MapView | undefined;
   let mapElement: HTMLElement;
+  let creditsElement: HTMLElement;
+  /** The rider's touches on the map, which fold the credits away on a phone. */
+  let touches = $state(0);
   let card: HTMLElement;
   let fileInput: HTMLInputElement;
 
@@ -55,9 +59,16 @@
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let droppingFile = $state(false);
 
-  // On a phone the card is a sheet, and a sheet can be put away: down to its header and the
-  // route's numbers, so the map has the screen. A tap on the handle toggles it, a swipe sets it.
+  // On a phone the card is a sheet, and a sheet can be put away, as the app's drawer: down to one
+  // bar, the route's numbers (or Search) and an X that throws the plan away, so the map has the
+  // screen. A tap on the handle toggles it, a swipe sets it.
   let collapsed = $state(false);
+  /** The put-away sheet's bar, tapped: the sheet comes up, and with no plan yet its field takes
+   *  the keyboard, inside the tap, as iOS wants. */
+  function expandSheet() {
+    flushSync(() => (collapsed = false));
+    if (planner.isEmpty) card.querySelector<HTMLInputElement>('.stop-field input')?.focus();
+  }
   let swipeFrom: number | null = null;
   function handleDown(event: PointerEvent) {
     swipeFrom = event.clientY;
@@ -125,7 +136,8 @@
       penClick: (at) => planner.penClicked(at),
       centered: (value) => (centered = value),
       moved: () => (menu = null),
-    });
+      touched: () => touches++,
+    }, creditsElement);
     // A link with a plan opens it, also one pasted into this tab, which changes only the hash.
     // Our own writes to the address use replaceState, which fires no hashchange.
     const openLinked = () => {
@@ -146,16 +158,35 @@
 
     const follow = (event: MediaQueryListEvent) => (prefersDark = event.matches);
     systemDark.addEventListener('change', follow);
-    // On a phone the card is a sheet at the bottom, and the scale and attribution sit above it.
-    const resize = new ResizeObserver(() => {
-      document.documentElement.style.setProperty('--sheet-height', `${card.offsetHeight}px`);
-    });
+    // On a phone the card is a sheet at the bottom, and the scale and attribution sit above it. The
+    // map runs on under Safari's bar, below the sheet's bottom, so the map's controls clear the
+    // distance from the map's foot to the sheet's top, measured.
+    const measure = () => {
+      const style = document.documentElement.style;
+      style.setProperty('--sheet-height', `${card.offsetHeight}px`);
+      style.setProperty('--sheet-clearance', `${mapElement.getBoundingClientRect().bottom - card.getBoundingClientRect().top}px`);
+    };
+    const resize = new ResizeObserver(measure);
     resize.observe(card);
+    resize.observe(mapElement);
+    // The map is taller than the window, so iOS has a page to scroll a field above its keyboard,
+    // leaves it scrolled once the keyboard goes, and Safari brings the scroll back on a reload.
+    // Without a field in use, the page stays at the top.
+    const settle = () => requestAnimationFrame(() => {
+      if (!document.activeElement?.matches('input, textarea') && window.scrollY) window.scrollTo(0, 0);
+    });
+    settle();
+    window.addEventListener('scroll', settle);
+    window.addEventListener('focusout', settle);
+    window.visualViewport?.addEventListener('resize', settle);
     return () => {
       window.removeEventListener('hashchange', openLinked);
       stopFixes();
       systemDark.removeEventListener('change', follow);
       resize.disconnect();
+      window.removeEventListener('scroll', settle);
+      window.removeEventListener('focusout', settle);
+      window.visualViewport?.removeEventListener('resize', settle);
       view?.map.remove();
     };
   });
@@ -236,10 +267,12 @@
   function padding() {
     const box = card.getBoundingClientRect();
     const bar = document.querySelector('.pen-bar')?.getBoundingClientRect();
-    const clear = (bottom: number) => (bar ? Math.max(bottom, window.innerHeight - bar.top + 24) : bottom);
+    // The map's foot, which on a phone is under Safari's bar, below the window's.
+    const foot = mapElement.getBoundingClientRect().bottom;
+    const clear = (bottom: number) => (bar ? Math.max(bottom, foot - bar.top + 24) : bottom);
     return window.innerWidth > 640
       ? { top: 72, bottom: clear(48), left: box.right + 32, right: 72 }
-      : { top: 72, bottom: clear(window.innerHeight - box.top + 24), left: 32, right: 72 };
+      : { top: 72, bottom: clear(foot - box.top + 24), left: 32, right: 72 };
   }
 
   function mapMenu(at: Coordinate): MenuItem[] {
@@ -362,11 +395,28 @@
 <svelte:window onkeydown={keydown} ondragover={dragover} ondragleave={() => (droppingFile = false)} ondrop={drop} />
 
 <div id="map" bind:this={mapElement} aria-label="Map"></div>
+<!-- Moved into the map's bottom-right corner, beside the scale, when the map is made. -->
+<div class="maplibregl-ctrl credits-ctrl" bind:this={creditsElement}><Credits {touches} /></div>
 
 <aside class="card glass" class:collapsed aria-label="Route planner" bind:this={card}>
   <button type="button" class="sheet-handle" aria-label={collapsed ? 'Show the planner' : 'Put the planner away'}
           aria-expanded={!collapsed} onpointerdown={handleDown} onpointerup={handleUp}
           onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); collapsed = !collapsed; } }}></button>
+  <div class="sheet-bar">
+    <button type="button" class="sheet-search" onclick={expandSheet}>
+      {#if planner.isEmpty}
+        <Icon name="search" size={18} /> <span class="sheet-placeholder">Search</span>
+      {:else}
+        <RouteSummary route={planner.route} locating={planner.waitingForLocation} />
+      {/if}
+    </button>
+    {#if !planner.isEmpty}
+      <button type="button" class="sheet-close glass" aria-label="Discard the route" title="Discard the route (Undo brings it back)"
+              onclick={() => planner.clear()}>
+        <Icon name="close" size={18} />
+      </button>
+    {/if}
+  </div>
   <header class="card-head">
     <a class="brand" href="../">
       <img src={logo} alt="Navitals" width="148" height="36">

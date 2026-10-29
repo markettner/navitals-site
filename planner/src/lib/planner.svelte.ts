@@ -580,6 +580,21 @@ export class Planner {
     this.nameSlowly(this.stops.filter((stop) => stop.kind === 'shaping').map((stop) => stop.id));
   }
 
+  /** The plan thrown away, as the app's X on its put-away drawer does: back to one empty field.
+   *  It can be undone. */
+  clear(): void {
+    if (this.isEmpty) return;
+    this.naming?.abort();
+    this.penRequest?.abort();
+    this.record();
+    this.line = null;
+    this.planName = null;
+    this.stops = [newStop(), newStop()];
+    this.renaming = null;
+    this.importMessage = '';
+    this.plan();
+  }
+
   /** A GPX file, by docs/ROUTE_GPX.md: a plan is planned again through its points, for its sport
    *  when it names one. Anything else is a line: shown as it is at once, and then fitted into a plan
    *  of stops and shaping points that BRouter rides along it. A line BRouter can't ride stays the
