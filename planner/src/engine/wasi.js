@@ -1,4 +1,4 @@
-// Copied from SwiftBRouter's web/ harness (branch wasm-spike); change it there and copy it back.
+// Copied from SwiftBRouter's web/ harness; change it there and copy it back.
 //
 // A minimal WASI preview1 for brouter.wasm, in a Worker. Two read-only preopened directories:
 //   /segments  .rd5 tiles, from a TileStore (tiles.js)

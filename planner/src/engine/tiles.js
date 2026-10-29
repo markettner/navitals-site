@@ -1,4 +1,4 @@
-// Copied from SwiftBRouter's web/ harness (branch wasm-spike); change it there and copy it back.
+// Copied from SwiftBRouter's web/ harness; change it there and copy it back.
 //
 // BRouter tiles streamed by HTTP range, the browser's StreamedTiles (Navitals/Routing/StreamedTiles.swift).
 //
@@ -9,7 +9,9 @@
 // handles (workers in Safari and Chrome), so a second visit to an area fetches nothing; otherwise
 // in memory for the page's life.
 //
-// A tile's file is named by its version, so blocks of two builds of a tile never mix.
+// A tile's file is named by its version, so blocks of two builds of a tile never mix. The files
+// count whole against the origin's quota however little of them is filled, so they are kept to a
+// budget, least recently used deleted first, and a tile the quota has no room for stays in memory.
 
 const BLOCK = 65536;
 const READ_AHEAD = 16 * BLOCK; // what a read mid-search fetches at least, aligned
@@ -17,6 +19,8 @@ const RUN_BLOCKS = 64; // at most 4 MB per request
 const PARALLEL = 6;
 const BUDGET = 150 * 1024 * 1024; // corridor bytes fetched ahead, at most
 const DIR = 'brouter-tiles';
+const USED = 'used.json'; // {"<tile>.<version>": when a route last opened it, ms}
+const STORED = 1024 * 1024 * 1024; // tile files kept, by their full size
 
 class Tile {
   constructor(name, size, version, path = name) {
@@ -26,7 +30,7 @@ class Tile {
     this.version = version;
     this.count = Math.ceil(size / BLOCK);
     this.bits = new Uint8Array((this.count + 7) >> 3);
-    this.memory = new Map(); // block -> bytes, when there is no file
+    this.memory = new Map(); // block -> bytes, when there is no file or it is full
     this.file = null; // FileSystemSyncAccessHandle
     this.bitsFile = null;
   }
@@ -34,23 +38,34 @@ class Tile {
 
   /** Bytes of consecutive blocks starting at `first`. */
   store(first, data) {
-    if (this.file) this.file.write(data, { at: first * BLOCK });
+    let inFile = false;
+    if (this.file && !this.full) {
+      try {
+        this.file.write(data, { at: first * BLOCK });
+        inFile = true;
+      } catch (e) {
+        // The quota ran out: what comes now stays in memory, for this page's life.
+        this.full = String(e);
+        console.warn(`tile ${this.name}: blocks stay in memory from here: ${e}`);
+      }
+    }
     for (let i = 0; i * BLOCK < data.length; i++) {
-      if (!this.file) this.memory.set(first + i, data.subarray(i * BLOCK, Math.min((i + 1) * BLOCK, data.length)));
+      if (!inFile) this.memory.set(first + i, data.subarray(i * BLOCK, Math.min((i + 1) * BLOCK, data.length)));
       this.bits[(first + i) >> 3] |= 1 << ((first + i) & 7);
     }
-    this.dirty = true;
+    if (inFile) this.dirty = true; // the bits file lists only what the file holds
   }
 
   /** Copies [offset, offset + dst.length), all of it present, into dst. */
   load(offset, dst) {
-    if (this.file) { this.file.read(dst, { at: offset }); return; }
+    if (this.file && this.memory.size === 0) { this.file.read(dst, { at: offset }); return; }
     let done = 0;
     while (done < dst.length) {
       const at = offset + done, b = Math.floor(at / BLOCK), block = this.memory.get(b);
-      const part = block.subarray(at - b * BLOCK, Math.min(block.length, at - b * BLOCK + dst.length - done));
-      dst.set(part, done);
-      done += part.length;
+      const length = Math.min(BLOCK - (at - b * BLOCK), dst.length - done);
+      if (block) dst.set(block.subarray(at - b * BLOCK, at - b * BLOCK + length), done);
+      else this.file.read(dst.subarray(done, done + length), { at });
+      done += length;
     }
   }
 
@@ -70,7 +85,11 @@ class Tile {
   flush() {
     if (!this.dirty) return;
     this.dirty = false;
-    if (this.bitsFile) { this.bitsFile.write(this.bits, { at: 0 }); this.bitsFile.flush(); this.file.flush(); }
+    if (!this.bitsFile) return;
+    // Only what the file holds: blocks kept in memory once it was full are not in it.
+    const bits = this.memory.size ? this.bits.slice() : this.bits;
+    for (const b of this.memory.keys()) bits[b >> 3] &= ~(1 << (b & 7));
+    this.bitsFile.write(bits, { at: 0 }); this.bitsFile.flush(); this.file.flush();
   }
 }
 
@@ -87,10 +106,11 @@ function runs(blocks) {
 
 export class TileStore {
   /** index: {name: {size, version, key?}}; base: the tiles' URL prefix, key the file's path under it (default: name) */
-  constructor(base, index, { persist = true } = {}) {
+  constructor(base, index, { persist = true, budget = STORED } = {}) {
     this.base = base;
     this.index = index;
     this.persist = persist && typeof FileSystemSyncAccessHandle !== 'undefined';
+    this.budget = budget;
     this.tiles = new Map();
     this.resetStats();
   }
@@ -115,7 +135,7 @@ export class TileStore {
    * Opens a tile's file in the private file system, carrying over blocks already in memory.
    * Handles are exclusive, and Safari keeps a page it navigated away from alive in its
    * back-forward cache, worker and all: so they are held only for a route (`release`), and an
-   * open that finds them taken is tried again for a while.
+   * open that finds them taken is tried again for a while. One the quota has no room for isn't.
    */
   async open(t) {
     if (!this.persist || t.file) return;
@@ -125,8 +145,8 @@ export class TileStore {
         t.openFailed = undefined;
         return;
       } catch (e) {
-        if (attempt >= 10) {
-          t.openFailed = String(e); // still taken: this route keeps the tile in memory
+        if (attempt >= 10 || e.name === 'QuotaExceededError') {
+          t.openFailed = String(e); // still taken, or no room: this route keeps the tile in memory
           console.warn(`tile ${t.name} stays in memory: ${e}`);
           return;
         }
@@ -139,24 +159,63 @@ export class TileStore {
     {
       const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(DIR, { create: true });
       const base = `${t.name}.${t.version}`;
+      await this.makeRoom(dir, t, base);
       const file = await (await dir.getFileHandle(base + '.rd5', { create: true })).createSyncAccessHandle();
       const bitsFile = await (await dir.getFileHandle(base + '.blocks', { create: true })).createSyncAccessHandle();
       const bits = new Uint8Array(t.bits.length);
-      if (file.getSize() === t.size && bitsFile.getSize() === bits.length) {
-        bitsFile.read(bits, { at: 0 });
-      } else {
-        file.truncate(0); file.truncate(t.size);
-        bitsFile.truncate(0); bitsFile.truncate(bits.length);
+      try {
+        if (file.getSize() === t.size && bitsFile.getSize() === bits.length) {
+          bitsFile.read(bits, { at: 0 });
+        } else {
+          file.truncate(0); file.truncate(t.size);
+          bitsFile.truncate(0); bitsFile.truncate(bits.length);
+        }
+        for (const [b, data] of t.memory) file.write(data, { at: b * BLOCK });
+      } catch (e) {
+        // No room for it: nothing of it is kept, and the route goes on with it in memory.
+        file.close(); bitsFile.close();
+        await removeTile(dir, base);
+        throw e;
       }
-      for (const [b, data] of t.memory) file.write(data, { at: b * BLOCK });
       for (let i = 0; i < bits.length; i++) t.bits[i] |= bits[i];
       t.memory.clear();
       t.storedBlocks = bits.reduce((n, x) => { while (x) { n += x & 1; x >>= 1; } return n; }, 0);
       t.file = file;
       t.bitsFile = bitsFile;
+      t.full = undefined;
       t.dirty = true;
       t.flush();
     }
+  }
+
+  /**
+   * Deletes stored tiles until `t` fits the budget beside the rest: other builds of it whatever the
+   * budget, then the least recently used. A tile another page holds open stays, and so do the ones
+   * this route has open. Then notes `t` as just used.
+   */
+  async makeRoom(dir, t, base) {
+    const used = await readUsed(dir);
+    const stored = [];
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== 'file' || !name.endsWith('.rd5') || name === base + '.rd5') continue;
+      const tile = name.slice(0, -4), size = (await handle.getFile()).size;
+      stored.push({ tile, size, stale: tile.slice(0, tile.lastIndexOf('.')) === t.name, used: used[tile] ?? 0 });
+    }
+    const open = new Set([...this.tiles.values()].filter(x => x.file).map(x => `${x.name}.${x.version}`));
+    let total = stored.reduce((n, x) => n + x.size, 0) + t.size;
+    stored.sort((a, b) => (b.stale - a.stale) || (a.used - b.used));
+    for (const x of stored) {
+      if (!x.stale && total <= this.budget) break;
+      if (open.has(x.tile)) continue;
+      if (await removeTile(dir, x.tile)) {
+        total -= x.size;
+        delete used[x.tile];
+        (this.evicted ??= []).push(x.tile);
+      }
+    }
+    used[base] = Date.now();
+    for (const tile of Object.keys(used)) if (tile !== base && !stored.some(x => x.tile === tile)) delete used[tile];
+    await writeUsed(dir, used);
   }
 
   /** Closes every file, so another page or tab can open them; the next route opens them again. */
@@ -334,6 +393,41 @@ export class TileStore {
     await this.fetchRuns(work);
     this.flush();
     this.stats.prefetchMs = performance.now() - t0;
+  }
+}
+
+// The private file system's bookkeeping
+
+/** Deletes a stored tile's two files; false if another page has them open. */
+async function removeTile(dir, tile) {
+  try {
+    await dir.removeEntry(tile + '.rd5');
+    await dir.removeEntry(tile + '.blocks').catch(() => {});
+    return true;
+  } catch (e) {
+    return e.name === 'NotFoundError';
+  }
+}
+
+async function readUsed(dir) {
+  try {
+    return JSON.parse(await (await (await dir.getFileHandle(USED)).getFile()).text());
+  } catch {
+    return {}; // none yet, or another page is writing it: every tile then counts as long unused
+  }
+}
+
+async function writeUsed(dir, used) {
+  let handle;
+  try {
+    handle = await (await dir.getFileHandle(USED, { create: true })).createSyncAccessHandle();
+    const bytes = new TextEncoder().encode(JSON.stringify(used));
+    handle.truncate(0);
+    handle.write(bytes, { at: 0 });
+  } catch (e) {
+    console.warn(`${USED} not written: ${e}`); // only the order of eviction suffers
+  } finally {
+    handle?.close();
   }
 }
 
