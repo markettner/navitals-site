@@ -30,6 +30,10 @@ jobs:
 
       - name: Build the planner
         working-directory: planner
+        env:
+          # Where the on-device engine streams BRouter's tiles from (navitals-packs' monthly R2 copy).
+          # It routes only for a browser that opened the planner with ?engine=local.
+          VITE_BROUTER_TILES: https://pub-33efb55f11f54c48b6bf4a5cafb8fbf9.r2.dev/brouter/
         run: |
           npm ci
           npm run build

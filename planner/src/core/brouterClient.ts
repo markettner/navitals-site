@@ -6,8 +6,12 @@
 // and the route asked once more. If an upload fails outright, brouter.de's own profile of the same
 // name is used: our files are brouter.de's copies (checked 2026-10-17), but for the ferry and steps
 // switches the app added to gravel, which brouter.de's gravel goes without.
+//
+// With the on-device engine switched on (localBRouter.ts), routes are asked of it first, and of
+// brouter.de only when it can't answer.
 
-import { BRouterDecodeError, decode, profileFor, routeURL, type AvoidArea, type Track } from './brouter';
+import { BRouterDecodeError, decode, lonlats, nogos, profileFor, profileParameters, routeURL, type AvoidArea, type Track } from './brouter';
+import { EngineUnavailable, type LocalBRouter } from './localBRouter';
 import { nearSideWaypoints } from './nearSide';
 import type { Sport, Way, Waypoint } from './route';
 
@@ -29,12 +33,15 @@ export interface BRouterClientOptions {
   /** The text of a profile, by name. */
   profileText: (profile: string) => Promise<string>;
   fetch?: typeof fetch;
+  /** The on-device engine, asked before brouter.de. */
+  engine?: LocalBRouter;
 }
 
 export class BRouterClient {
   private readonly base: string;
   private readonly profileText: (profile: string) => Promise<string>;
   private readonly fetch: typeof fetch;
+  private readonly engine?: LocalBRouter;
   /** The id brouter.de gave each uploaded profile (or will: the upload may still be on its way). */
   private readonly uploaded = new Map<string, Promise<string>>();
 
@@ -42,6 +49,7 @@ export class BRouterClient {
     this.base = options.base ?? brouterBase;
     this.profileText = options.profileText;
     this.fetch = options.fetch ?? fetch.bind(globalThis);
+    this.engine = options.engine;
   }
 
   /** BRouter's route through the waypoints for a sport. A shaping point dropped on the far side of
@@ -71,6 +79,14 @@ export class BRouterClient {
 
   private async answer(waypoints: Waypoint[], sport: Sport, options: RouteRequestOptions): Promise<Track> {
     const profile = profileFor(sport);
+    if (this.engine && !this.engine.broken) {
+      try {
+        return await this.engineAnswer(waypoints, profile, options);
+      } catch (error) {
+        if (!(error instanceof EngineUnavailable)) throw error;
+        console.warn(`brouter.de instead of the engine: ${error.message}`);
+      }
+    }
     const id = await this.profileID(profile, options.signal);
     let response = await this.get(waypoints, id, options);
     let text = await response.text();
@@ -87,6 +103,25 @@ export class BRouterClient {
     } catch (error) {
       // BRouter explains a refusal in plain text ("position not mapped in existing datafile").
       if (error instanceof BRouterDecodeError) throw new RoutingError(text.trim() || error.message);
+      throw error;
+    }
+  }
+
+  /** The engine's route: the same request and the same answer as brouter.de's, with our profiles. */
+  private async engineAnswer(waypoints: Waypoint[], profile: string, options: RouteRequestOptions): Promise<Track> {
+    const text = await this.engine!.route({
+      profile,
+      alternative: options.alternative ?? 0,
+      lonlats: lonlats(waypoints),
+      parameters: profileParameters(waypoints, options.without),
+      nogos: nogos(options.avoid ?? []),
+    }, options.signal);
+    // BRouter's reason, as the engine passes on the exception: "error: java.lang.…Exception: <reason>"
+    if (text.startsWith('error:')) throw new RoutingError(text.replace(/^error:\s*(?:[\w.]+Exception:\s*)?/, '').trim());
+    try {
+      return decode(text);
+    } catch (error) {
+      if (error instanceof BRouterDecodeError) throw new RoutingError(error.message);
       throw error;
     }
   }

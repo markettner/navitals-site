@@ -7,7 +7,7 @@ set -eu
 here=$(cd "$(dirname "$0")/.." && pwd)
 app=${1:-"$here/../../Navitals"}
 python3 "$app/tools/styles/build_styles.py" --web-out "$here/public/styles" >/dev/null
-cp "$app"/Navitals/Resources/BRouter/*.brf "$here/public/profiles/"
+cp "$app"/Navitals/Resources/BRouter/*.brf "$app"/Navitals/Resources/BRouter/lookups.dat "$here/public/profiles/"
 fixtures="$app/NavitalsKit/Tests/NavitalsKitTests/Fixtures"
 cp "$fixtures"/route-gpx/*.gpx "$fixtures/brouter-far-side-via.json" "$fixtures/brouter-route1-timode3.geojson" \
   "$fixtures/brouter-mauerweg-replan.json" "$fixtures/route-link/route-links.json" "$here/test/fixtures/"

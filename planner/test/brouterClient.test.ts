@@ -1,9 +1,11 @@
 // The brouter.de client against a stand-in server: uploads, a forgotten profile, refusals, and the
-// app's second request for a shaping point on the far side of the road.
+// app's second request for a shaping point on the far side of the road. And the on-device engine
+// in front of it, stood in for: what it is asked, and when brouter.de is asked instead.
 
 import { describe, expect, test } from 'vitest';
 import fixtureText from './fixtures/brouter-far-side-via.json?raw';
 import { BRouterClient, RoutingError } from '../src/core/brouterClient';
+import { EngineUnavailable, type EngineRequest, type LocalBRouter } from '../src/core/localBRouter';
 import type { Waypoint } from '../src/core/route';
 
 type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>;
@@ -137,5 +139,46 @@ describe('the brouter.de client', () => {
     release();
     expect((await second).length).toBe(1800);
     expect(uploads).toBe(1);
+  });
+});
+
+describe('the on-device engine in front of brouter.de', () => {
+  /** An engine that answers through `answer` and records what it was asked. */
+  function engine(answer: (request: EngineRequest) => string) {
+    const requests: EngineRequest[] = [];
+    const stand = { broken: false, route: async (request: EngineRequest) => { requests.push(request); return answer(request); } };
+    return { engine: stand as unknown as LocalBRouter, requests };
+  }
+  const nowhere = server(() => { throw new Error('brouter.de was asked'); });
+
+  test("it gets brouter.de's request, without the profile: prefix, and brouter.de is never asked", async () => {
+    const local = engine(() => straight);
+    const client = new BRouterClient({ profileText, fetch: nowhere.fetch, engine: local.engine });
+    const via: Waypoint[] = [points[0], { latitude: 52.515, longitude: 13.41, kind: 'stop' }, points[1]];
+    const track = await client.route(via, 'gravel', { alternative: 2, avoid: [{ latitude: 52.5, longitude: 13.4, radius: 50.4 }], without: ['ferries'] });
+    expect(track.length).toBe(1800);
+    expect(local.requests).toEqual([{
+      profile: 'gravel',
+      alternative: 2,
+      lonlats: '13.400000,52.520000|13.410000,52.515000,m|13.420000,52.510000',
+      parameters: { pass2coefficient: '1', allow_ferries: '0' },
+      nogos: '13.400000,52.500000,50',
+    }]);
+    expect(nowhere.requests).toHaveLength(0);
+  });
+
+  test("BRouter's reason for no route is shown without the exception's name, and brouter.de isn't asked", async () => {
+    const local = engine(() => 'error: java.lang.IllegalArgumentException: from-position not mapped in existing datafile');
+    const client = new BRouterClient({ profileText, fetch: nowhere.fetch, engine: local.engine });
+    await expect(client.route(points, 'road')).rejects.toThrow(new RoutingError('from-position not mapped in existing datafile'));
+  });
+
+  test('when the engine can\'t answer, brouter.de routes', async () => {
+    const local = engine(() => { throw new EngineUnavailable('No tiles there.'); });
+    const brouter = server((url) => (url.pathname.endsWith('/profile') ? uploaded('custom_1') : new Response(straight)));
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch, engine: local.engine });
+    expect((await client.route(points, 'cycling')).length).toBe(1800);
+    expect(local.requests).toHaveLength(1);
+    expect(brouter.routes()).toHaveLength(1);
   });
 });

@@ -3,6 +3,7 @@
 // request still on its way, and can be undone.
 
 import { BRouterClient } from '../core/brouterClient';
+import { localBRouter } from '../core/localBRouter';
 import type { AvoidArea, Track } from '../core/brouter';
 import { climbing, distance, length, project, type Coordinate } from '../core/geodesy';
 import { avoidZone, failure, planEdit, summary } from '../core/penEdit';
@@ -178,6 +179,7 @@ export class Planner {
       this.requestCount++;
       return fetch(input, init);
     },
+    engine: localBRouter(),
   });
   private request: AbortController | null = null;
   /** When each request to brouter.de of the last minute went out, oldest first, and how many have

@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "sync": "scripts/sync-from-app.sh",
+    "sync:engine": "scripts/sync-engine.sh",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
   },
   "dependencies": {
