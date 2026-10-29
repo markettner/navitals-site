@@ -188,7 +188,8 @@
     // leaves it scrolled once the keyboard goes, and Safari brings the scroll back on a reload.
     // Without a field in use, the page goes back to its top: only from below it, as Safari's
     // "Open in the Navitals app" banner sits above the top, and scrolling to 0 hid it.
-    const settle = () => requestAnimationFrame(() => {
+    // TEMPORARY: ?b=r turns the reset off.
+    const settle = () => document.documentElement.dataset.b?.includes('r') || requestAnimationFrame(() => {
       if (!document.activeElement?.matches('input, textarea') && window.scrollY > 0) window.scrollTo(0, 0);
     });
     settle();

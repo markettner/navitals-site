@@ -83,6 +83,8 @@ body {
    reaches the screen's edge under the bar (the overhang is clipped where there is no bar). */
 #map { position: absolute; top: 0; left: 0; right: 0; height: calc(100lvh + var(--overhang)); }
 /* A long press opens our menu, not the browser's text selection or image callout. */
+/* TEMPORARY: ?b=s, the map as it was before Oct 29. */
+html[data-b*="s"] #map { position: fixed; inset: 0; height: auto; }
 #map { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
 .glass {

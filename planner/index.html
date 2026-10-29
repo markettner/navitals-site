@@ -3,7 +3,17 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- TEMPORARY (Oct 30): which change hid Safari's "Open in the Navitals app" banner? ?b= with
+         letters undoes one each: v viewport-fit=cover, t theme-color, s the tall map, r the scroll
+         reset. Remove once found. -->
+    <script>
+        (function () {
+            var b = (new URLSearchParams(location.search).get('b') || '');
+            document.documentElement.setAttribute('data-b', b);
+            document.write('<meta name="viewport" content="width=device-width, initial-scale=1.0' + (b.indexOf('v') >= 0 ? '' : ', viewport-fit=cover') + '">');
+            if (b.indexOf('t') >= 0) document.write('<meta name="theme-color" content="#93CC3E" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0E1A10" media="(prefers-color-scheme: dark)">');
+        })();
+    </script>
     <title>Route Planner - Navitals</title>
     <meta name="description"
         content="Plan a bike or hiking route on the Navitals map, with the app's BRouter profiles, and take it to your iPhone as GPX.">
