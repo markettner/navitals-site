@@ -200,7 +200,7 @@
   </ol>
   <div class="stop-actions">
     <button type="button" class="text-button" onclick={() => planner.addStop()}>
-      <span class="add-icon" aria-hidden="true">+</span> Add Stop
+      <span class="add-icon" aria-hidden="true"><Icon name="plus" size={14} /></span> Add Stop
     </button>
     <button type="button" class="icon-button" aria-label="Reverse the route" title="Reverse"
             disabled={planner.waypoints.length < 2} onclick={() => planner.reverse()}>⇅</button>

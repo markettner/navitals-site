@@ -83,10 +83,6 @@ body {
    reaches the screen's edge under the bar (the overhang is clipped where there is no bar). */
 #map { position: absolute; top: 0; left: 0; right: 0; height: calc(100lvh + var(--overhang)); }
 /* A long press opens our menu, not the browser's text selection or image callout. */
-/* TEMPORARY: ?b=c, the tall map on a page that is no scroll area at all. */
-html[data-b*="c"], html[data-b*="c"] body { overflow: clip; }
-/* TEMPORARY: ?b=s, the map as it was before Oct 29. */
-html[data-b*="s"] #map { position: fixed; inset: 0; height: auto; }
 #map { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
 .glass {
@@ -238,8 +234,10 @@ html[data-b*="s"] #map { position: fixed; inset: 0; height: auto; }
 }
 .add-icon {
     width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
-    color: #FFFFFF; background: var(--red-ui); font-weight: 600;
+    color: #FFFFFF; background: var(--red-ui);
 }
+/* Drawn, not the font's +, which sits off the circle's middle. */
+.add-icon .icon { stroke-width: 3.25; }
 
 /* ---------- The route ---------- */
 .route-section { gap: 10px; }
@@ -261,7 +259,6 @@ html[data-b*="s"] #map { position: fixed; inset: 0; height: auto; }
     background: var(--red-ui); border: 0; border-radius: 999px; padding: 10px 20px; cursor: pointer;
 }
 .primary-button:hover { opacity: 0.92; }
-.route-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .secondary-button {
     font: inherit; font-size: 16px; font-weight: 600; color: var(--red-ui); text-decoration: none;
     background: transparent; border: 1.5px solid var(--red-ui); border-radius: 999px; padding: 8.5px 18px; cursor: pointer;

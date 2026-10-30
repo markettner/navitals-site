@@ -56,7 +56,7 @@
   const style = $derived(wantsDark(choice.appearance, prefersDark) ? choice.dark : choice.light);
 
   type MenuItem = { label: string; destructive?: boolean; action: () => void };
-  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  let menu = $state<{ x: number; y: number; items: MenuItem[]; anchor?: HTMLElement } | null>(null);
   let droppingFile = $state(false);
 
   // On a phone the card is a sheet, and a sheet can be put away, as the app's drawer: down to one
@@ -188,8 +188,7 @@
     // leaves it scrolled once the keyboard goes, and Safari brings the scroll back on a reload.
     // Without a field in use, the page goes back to its top: only from below it, as Safari's
     // "Open in the Navitals app" banner sits above the top, and scrolling to 0 hid it.
-    // TEMPORARY: ?b=r turns the reset off.
-    const settle = () => document.documentElement.dataset.b?.includes('r') || requestAnimationFrame(() => {
+    const settle = () => requestAnimationFrame(() => {
       if (!document.activeElement?.matches('input, textarea') && window.scrollY > 0) window.scrollTo(0, 0);
     });
     settle();
@@ -355,6 +354,25 @@
     setTimeout(() => (linkMessage = ''), 2500);
   }
 
+  // The toolbar's Share, as komoot's: the route to the app, its link, or its GPX file.
+  let shareButton: HTMLButtonElement;
+  function toggleShare() {
+    if (menu?.anchor === shareButton) {
+      menu = null;
+      return;
+    }
+    const items: MenuItem[] = [];
+    if (appLink) {
+      const link = appLink;
+      items.push({ label: 'Open in Navitals', action: () => (location.href = link) });
+    }
+    if (planLink) items.push({ label: touchScreen && 'share' in navigator ? 'Share Link' : 'Copy Link', action: shareLink });
+    items.push({ label: 'Export GPX', action: exportGPX });
+    // The menu sets itself 4 px right and down of its point.
+    const box = shareButton.getBoundingClientRect();
+    menu = { x: box.left - 4, y: box.bottom + 4, items, anchor: shareButton };
+  }
+
   function exportGPX() {
     if (planner.route.status !== 'ready') return;
     const gpx = writeRoute(planner.title, planner.sport, planner.route.track.coordinates, planner.exportWaypoints, Boolean(planner.line));
@@ -463,18 +481,7 @@
     {#if planner.route.status === 'ready'}
       <ElevationProfile track={planner.route.track} onpoint={(point) => view?.showPosition(point)} />
     {/if}
-    {#if planner.route.status === 'ready'}
-      <div class="route-actions">
-        <button type="button" class="primary-button" onclick={exportGPX}>Export GPX</button>
-        {#if planLink}
-          <button type="button" class="secondary-button" onclick={shareLink}>{touchScreen && 'share' in navigator ? 'Share Link' : 'Copy Link'}</button>
-        {/if}
-        {#if appLink}
-          <a class="secondary-button" href={appLink}>Open in Navitals</a>
-        {/if}
-      </div>
-      {#if linkMessage}<p class="summary-message" role="status">{linkMessage}</p>{/if}
-    {/if}
+    {#if linkMessage}<p class="summary-message" role="status">{linkMessage}</p>{/if}
     {#if planner.importMessage}<p class="summary-message" role="alert">{planner.importMessage}</p>{/if}
   </div>
 
@@ -484,6 +491,11 @@
 <div class="toolbar" role="toolbar" aria-label="Route">
   <button type="button" class="tool-round glass" aria-label="Import GPX" title="Import a GPX file, or drop one on the map" onclick={() => fileInput.click()}>
     <Icon name="import" />
+  </button>
+  <button type="button" class="tool-round glass" aria-label="Share" title={planner.route.status === 'ready' ? 'Open in Navitals, share the link or export GPX' : 'Plan a route to share it'}
+          aria-haspopup="menu" aria-expanded={Boolean(menu?.anchor)} disabled={planner.route.status !== 'ready'}
+          bind:this={shareButton} onclick={toggleShare}>
+    <Icon name="share" />
   </button>
   <input bind:this={fileInput} type="file" accept=".gpx,application/gpx+xml" hidden
          onchange={(event) => { importFile(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} />
@@ -511,5 +523,5 @@
 {/if}
 
 {#if menu}
-  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onclose={() => (menu = null)} />
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} anchor={menu.anchor} onclose={() => (menu = null)} />
 {/if}

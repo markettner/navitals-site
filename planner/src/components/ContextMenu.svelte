@@ -1,18 +1,21 @@
 <script lang="ts">
   // A right-click menu over the map: for a point (Start here, …) or for a stop or bend (Remove, …).
+  // The toolbar's Share opens it too, under its button.
   interface Props {
     x: number;
     y: number;
     items: { label: string; destructive?: boolean; action: () => void }[];
     onclose: () => void;
+    /** The button that opened the menu: pressing it again is its own toggle, not a press away. */
+    anchor?: HTMLElement;
   }
-  let { x, y, items, onclose }: Props = $props();
+  let { x, y, items, onclose, anchor }: Props = $props();
 
   let menu: HTMLElement;
 
   $effect(() => {
     menu.querySelector('button')?.focus();
-    const away = (event: PointerEvent) => { if (!menu.contains(event.target as Node)) onclose(); };
+    const away = (event: PointerEvent) => { if (!menu.contains(event.target as Node) && !anchor?.contains(event.target as Node)) onclose(); };
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') onclose(); };
     window.addEventListener('pointerdown', away, true);
     window.addEventListener('keydown', key);
