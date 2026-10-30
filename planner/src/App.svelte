@@ -186,8 +186,8 @@
     resize.observe(mapElement);
     // The map is taller than the window, so iOS has a page to scroll a field above its keyboard,
     // leaves it scrolled once the keyboard goes, and Safari brings the scroll back on a reload.
-    // Without a field in use, the page goes back to its top: only from below it, as Safari's
-    // "Open in the Navitals app" banner sits above the top, and scrolling to 0 hid it.
+    // Without a field in use, the page goes back to its top: only from below it, so Safari's
+    // pull past the top springs back by itself.
     const settle = () => requestAnimationFrame(() => {
       if (!document.activeElement?.matches('input, textarea') && window.scrollY > 0) window.scrollTo(0, 0);
     });
