@@ -150,7 +150,9 @@ a.eyebrow-pill:hover { color: var(--kicker); background: rgba(251, 42, 42, 0.17)
 
 /* ---------- Devices ---------- */
 /* Framed screenshots from the fastlane run: the device frame is part of the image, on transparency,
-   so the shadow is a drop-shadow that follows the frame's outline. */
+   so the shadow is a drop-shadow that follows the frame's outline. Dark mode swaps in black frames
+   through <picture>, which takes no part in the layout: the img is what's sized and placed. */
+picture { display: contents; }
 .shot { display: block; max-width: 100%; height: auto; filter: drop-shadow(0 28px 36px rgba(10, 30, 0, 0.38)); }
 .shot.iphone { width: 262px; }
 .shot.iphone.large { width: 300px; }

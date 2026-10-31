@@ -95,7 +95,10 @@
                 </ul>
             </div>
             <div class="spot-visual">
-                <img class="shot iphone" src="screenshots/iphone-map.webp" width="600" height="1224" alt="The Navitals map on iPhone: forest paths, trails and a cycle route overlay">
+                <picture>
+                    <source srcset="screenshots/iphone-map-dark.webp" media="(prefers-color-scheme: dark)">
+                    <img class="shot iphone" src="screenshots/iphone-map.webp" width="600" height="1224" alt="The Navitals map on iPhone: forest paths, trails and a cycle route overlay">
+                </picture>
             </div>
         </section>
 
@@ -114,7 +117,10 @@
                 </ul>
             </div>
             <div class="spot-visual">
-                <img loading="lazy" class="shot iphone" src="screenshots/iphone-lock-screen.webp" width="600" height="1224" alt="The next turn as a Live Activity on the iPhone Lock Screen">
+                <picture>
+                    <source srcset="screenshots/iphone-lock-screen-dark.webp" media="(prefers-color-scheme: dark)">
+                    <img loading="lazy" class="shot iphone" src="screenshots/iphone-lock-screen.webp" width="600" height="1224" alt="The next turn as a Live Activity on the iPhone Lock Screen">
+                </picture>
             </div>
         </section>
 
@@ -133,7 +139,10 @@
                 </ul>
             </div>
             <div class="spot-visual">
-                <img loading="lazy" class="shot iphone" src="screenshots/iphone-ride.webp" width="600" height="1224" alt="Navigating on iPhone: the next turn, with heart rate and distance left">
+                <picture>
+                    <source srcset="screenshots/iphone-ride-dark.webp" media="(prefers-color-scheme: dark)">
+                    <img loading="lazy" class="shot iphone" src="screenshots/iphone-ride.webp" width="600" height="1224" alt="Navigating on iPhone: the next turn, with heart rate and distance left">
+                </picture>
             </div>
         </section>
 
@@ -159,7 +168,10 @@
                 </ul>
             </div>
             <div class="spot-visual">
-                <img loading="lazy" class="shot iphone" src="screenshots/iphone-route.webp" width="600" height="1224" alt="A planned round trip on the Berliner Mauerweg, 167 km, with its stops listed below the map">
+                <picture>
+                    <source srcset="screenshots/iphone-route-dark.webp" media="(prefers-color-scheme: dark)">
+                    <img loading="lazy" class="shot iphone" src="screenshots/iphone-route.webp" width="600" height="1224" alt="A planned round trip on the Berliner Mauerweg, 167 km, with its stops listed below the map">
+                </picture>
             </div>
         </section>
 
@@ -178,7 +190,10 @@
                 </ul>
             </div>
             <div class="spot-visual">
-                <img loading="lazy" class="shot iphone" src="screenshots/iphone-offline-regions.webp" width="600" height="1224" alt="Downloading a region for offline use">
+                <picture>
+                    <source srcset="screenshots/iphone-offline-regions-dark.webp" media="(prefers-color-scheme: dark)">
+                    <img loading="lazy" class="shot iphone" src="screenshots/iphone-offline-regions.webp" width="600" height="1224" alt="Downloading a region for offline use">
+                </picture>
             </div>
         </section>
 
@@ -197,7 +212,10 @@
                 </ul>
             </div>
             <div class="spot-visual">
-                <img loading="lazy" class="shot iphone" src="screenshots/iphone-ride-night.webp" width="600" height="1224" alt="Navigating at night with the dark map">
+                <picture>
+                    <source srcset="screenshots/iphone-ride-night-dark.webp" media="(prefers-color-scheme: dark)">
+                    <img loading="lazy" class="shot iphone" src="screenshots/iphone-ride-night.webp" width="600" height="1224" alt="Navigating at night with the dark map">
+                </picture>
             </div>
         </section>
 
@@ -215,7 +233,10 @@
                 </ul>
             </div>
             <div class="spot-visual">
-                <img loading="lazy" class="shot iphone" src="screenshots/iphone-ride-locked.webp" width="600" height="1224" alt="Navigation with the water lock on">
+                <picture>
+                    <source srcset="screenshots/iphone-ride-locked-dark.webp" media="(prefers-color-scheme: dark)">
+                    <img loading="lazy" class="shot iphone" src="screenshots/iphone-ride-locked.webp" width="600" height="1224" alt="Navigation with the water lock on">
+                </picture>
             </div>
         </section>
 
@@ -248,9 +269,18 @@
                     </div>
                 </div>
                 <div class="devices-visual">
-                    <img loading="lazy" data-panel="iphone" class="shot iphone" src="screenshots/iphone-ride.webp" width="600" height="1224" alt="Navigating on iPhone: the next turn, with heart rate and distance left">
-                    <img loading="lazy" data-panel="watch" class="shot watch-shot" src="screenshots/watch-map.webp" width="480" height="768" alt="Apple Watch Ultra showing the map and the next turn during a ride" hidden>
-                    <img loading="lazy" data-panel="ipad" class="shot ipad-shot" src="screenshots/ipad-route.webp" width="1000" height="767" alt="Planning the Berliner Mauerweg on iPad, with the stops beside the map" hidden>
+                    <picture data-panel="iphone">
+                        <source srcset="screenshots/iphone-ride-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img loading="lazy" class="shot iphone" src="screenshots/iphone-ride.webp" width="600" height="1224" alt="Navigating on iPhone: the next turn, with heart rate and distance left">
+                    </picture>
+                    <picture data-panel="watch" hidden>
+                        <source srcset="screenshots/watch-map-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img loading="lazy" class="shot watch-shot" src="screenshots/watch-map.webp" width="480" height="768" alt="Apple Watch Ultra showing the map and the next turn during a ride">
+                    </picture>
+                    <picture data-panel="ipad" hidden>
+                        <source srcset="screenshots/ipad-route-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img loading="lazy" class="shot ipad-shot" src="screenshots/ipad-route.webp" width="1000" height="767" alt="Planning the Berliner Mauerweg on iPad, with the stops beside the map">
+                    </picture>
                     <div class="mac-frame placeholder" data-panel="mac" hidden>Mac: dragging a route into shape</div>
                 </div>
             </div>
