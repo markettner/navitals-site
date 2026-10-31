@@ -118,6 +118,8 @@
     } else {
       onchoose(chosen);
     }
+    // The field now says what was chosen: an empty query would read below as emptied and left.
+    query = chosen.name;
     close();
     (document.activeElement as HTMLElement | null)?.blur();
   }
