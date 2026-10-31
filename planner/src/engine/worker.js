@@ -6,7 +6,8 @@
 //   → {type: 'init', module, tiles, profiles}     tiles: URL prefix of index.json and the .rd5s
 //   ← {type: 'ready'} | {type: 'failed', error}
 //   → {type: 'route', request, stops}             request: the engine's tab-separated fields
-//   ← {type: 'answer', text} | {type: 'uncovered'} | {type: 'failed', error}
+//   ← {type: 'downloading', done, total}*, {type: 'searching'}, then {type: 'answer', text}
+//     | {type: 'uncovered'} | {type: 'failed', error}
 
 import { ProfileStore, WASI } from './wasi.js';
 import { TileStore, tileFor } from './tiles.js';
@@ -41,7 +42,9 @@ onmessage = async ({ data }) => {
         return;
       }
       wasi.tiles.resetStats();
+      wasi.tiles.onProgress = (done, total) => postMessage({ type: 'downloading', done, total });
       await wasi.tiles.prefetch(data.stops);
+      postMessage({ type: 'searching' });
       let text;
       try {
         text = route(data.request);

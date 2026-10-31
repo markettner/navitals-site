@@ -3,7 +3,7 @@
 // request still on its way, and can be undone.
 
 import { BRouterClient } from '../core/brouterClient';
-import { localBRouter } from '../core/localBRouter';
+import { localBRouter, withinEngineReach, type EngineDownload } from '../core/localBRouter';
 import type { AvoidArea, Track } from '../core/brouter';
 import { climbing, distance, length, project, type Coordinate } from '../core/geodesy';
 import { avoidZone, failure, OutOfRequests, planEdit, summary } from '../core/penEdit';
@@ -195,6 +195,8 @@ export class Planner {
   private future = $state.raw<Snapshot[]>([]);
 
   readonly search = new PlaceSearch();
+  /** What the on-device engine is downloading for the route under way. */
+  engineDownload = $state.raw<EngineDownload | null>(null);
   private readonly client = new BRouterClient({
     profileText: async (profile) => {
       const response = await fetch(`${import.meta.env.BASE_URL}profiles/${profile}.brf`);
@@ -207,7 +209,7 @@ export class Planner {
       this.requestCount++;
       return fetch(input, init);
     },
-    engine: localBRouter(),
+    engine: localBRouter((download) => { this.engineDownload = download; }),
   });
   private request: AbortController | null = null;
   /** When each request to brouter.de of the last minute went out, oldest first, and how many have
@@ -682,7 +684,8 @@ export class Planner {
     const mayRoute = (routings: number) => this.requestCount - before + routings <= fitRequests
       && this.requestsThisMinute() + routings <= brouterRequestsPerMinute;
     let refused = false;
-    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, without, signal: request.signal })
+    const onDevice = withinEngineReach(line.track.coordinates);
+    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, without, onDevice, signal: request.signal })
       .catch((error: unknown) => {
         if (error instanceof Error && /retry later/i.test(error.message)) refused = true;
         throw error;
@@ -787,7 +790,7 @@ export class Planner {
     this.selectedZone = null;
     this.penStatus = { kind: 'planning' };
     const router = (waypoints: Waypoint[], avoid: AvoidArea[], signal?: AbortSignal) =>
-      this.client.route(waypoints, this.sport, { avoid, without: this.without, signal });
+      this.client.route(waypoints, this.sport, { avoid, without: this.without, onDevice: withinEngineReach(waypoints), signal });
     const stillCurrent = () => this.penRequest === request && this.route.status === 'ready' && this.route.track === track;
     const mayRoute = () => this.requestsThisMinute() < backgroundRequestsPerMinute;
     try {
@@ -900,7 +903,9 @@ export class Planner {
     // is one route, only the stretches the last edit touched are asked for (plan Phase 7k). A plan
     // that will have alternatives is asked for whole, as each alternative is.
     const shaped = waypoints.some((w) => w.kind === 'shaping');
-    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, without, signal: request.signal });
+    // Decided for the whole plan: its stretches would each pass, and download all the same.
+    const onDevice = withinEngineReach(waypoints);
+    const route = (points: Waypoint[]) => this.client.route(points, sport, { avoid, without, onDevice, signal: request.signal });
     (shaped ? routeStretches(waypoints, this.stretches, stretchContext(sport, avoid, without), route) : route(waypoints)).then(
       (track) => {
         if (this.request !== request) return;
@@ -932,7 +937,8 @@ export class Planner {
       for (let alternative = 1; alternative <= alternatives; alternative++) {
         // Alternatives are offered, not asked for: none past the minute's share for them.
         if (this.requestsThisMinute() >= backgroundRequestsPerMinute) return;
-        const track = await this.client.route(waypoints, this.sport, { alternative, avoid, without: this.without, signal });
+        const track = await this.client.route(waypoints, this.sport,
+          { alternative, avoid, without: this.without, onDevice: withinEngineReach(waypoints), signal });
         const route = this.route;
         if (this.request !== request || route.status !== 'ready') return;
         if (route.tracks.some((known) => Math.abs(known.length - track.length) < 1 && known.coordinates.length === track.coordinates.length)) continue;

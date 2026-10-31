@@ -7,8 +7,8 @@
 // name is used: our files are brouter.de's copies (checked 2026-10-17), but for the ferry and steps
 // switches the app added to gravel, which brouter.de's gravel goes without.
 //
-// With the on-device engine switched on (localBRouter.ts), routes are asked of it first, and of
-// brouter.de only when it can't answer.
+// A plan within its reach is asked of the on-device engine first (localBRouter.ts), and of
+// brouter.de only when the engine can't answer.
 
 import { BRouterDecodeError, decode, lonlats, nogos, profileFor, profileParameters, routeURL, type AvoidArea, type Track } from './brouter';
 import { EngineUnavailable, type LocalBRouter } from './localBRouter';
@@ -33,6 +33,8 @@ export interface RouteRequestOptions {
   avoid?: AvoidArea[];
   /** Ferries and steps to leave out, where there is a way round them. */
   without?: Way[];
+  /** Whether the engine may answer: no when this is part of a plan beyond its reach. */
+  onDevice?: boolean;
   signal?: AbortSignal;
 }
 
@@ -43,6 +45,20 @@ export interface BRouterClientOptions {
   fetch?: typeof fetch;
   /** The on-device engine, asked before brouter.de. */
   engine?: LocalBRouter;
+}
+
+/** What the engine's "error: <Swift's BRouterError>" means: BRouter's reason for no route, in
+ *  the words brouter.de would use, or that the search reached a tile we don't have. */
+function engineRefusal(text: string): Error {
+  const error = text.slice('error:'.length).trim();
+  if (error.startsWith('missingSegment(')) return new EngineUnavailable(error);
+  const reason = /^routing\((".*")\)$/s.exec(error)?.[1];
+  if (!reason) return new RoutingError(error);
+  try {
+    return new RoutingError(JSON.parse(reason) as string);
+  } catch {
+    return new RoutingError(reason.slice(1, -1));
+  }
 }
 
 export class BRouterClient {
@@ -88,7 +104,7 @@ export class BRouterClient {
 
   private async answer(waypoints: Waypoint[], sport: Sport, options: RouteRequestOptions): Promise<Track> {
     const profile = profileFor(sport);
-    if (this.engine && !this.engine.broken) {
+    if (this.engine && !this.engine.broken && options.onDevice !== false) {
       try {
         return await this.engineAnswer(waypoints, profile, options);
       } catch (error) {
@@ -125,8 +141,7 @@ export class BRouterClient {
       parameters: profileParameters(waypoints, options.without),
       nogos: nogos(options.avoid ?? []),
     }, options.signal);
-    // BRouter's reason, as the engine passes on the exception: "error: java.lang.…Exception: <reason>"
-    if (text.startsWith('error:')) throw new RoutingError(text.replace(/^error:\s*(?:[\w.]+Exception:\s*)?/, '').trim());
+    if (text.startsWith('error:')) throw engineRefusal(text);
     try {
       return decode(text);
     } catch (error) {

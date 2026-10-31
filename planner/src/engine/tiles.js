@@ -111,6 +111,7 @@ export class TileStore {
     this.index = index;
     this.persist = persist && typeof FileSystemSyncAccessHandle !== 'undefined';
     this.budget = budget;
+    this.onProgress = null; // (bytes done, bytes in all, 0 while that isn't known), during a prefetch
     this.tiles = new Map();
     this.resetStats();
   }
@@ -309,9 +310,12 @@ export class TileStore {
 
   // The corridor
 
-  /** Fetches the given block runs, PARALLEL requests at a time. */
-  async fetchRuns(work) {
-    let next = 0;
+  /** Fetches the given block runs, PARALLEL requests at a time. Each run counts as soon as it is
+   *  in, so a page that gives up on a route (or closes) keeps what came. */
+  async fetchRuns(work, report = false) {
+    let next = 0, done = 0;
+    const total = work.reduce((n, [t, first, last]) => n + Math.min((last + 1) * BLOCK, t.size) - first * BLOCK, 0);
+    if (report && total) this.onProgress?.(0, total);
     const worker = async () => {
       while (next < work.length) {
         const [t, first, last] = work[next++];
@@ -319,8 +323,11 @@ export class TileStore {
         const r = await fetch(this.base + t.path, { headers: { Range: `bytes=${from}-${to}` } });
         const data = this.checked(t, r.status, r.headers.get('Content-Range'), await r.arrayBuffer(), from, to);
         t.store(first, data);
+        t.flush();
         this.stats.prefetchRequests++;
         this.stats.prefetchBytes += data.length;
+        done += data.length;
+        if (report) this.onProgress?.(done, total);
       }
     };
     await Promise.all(Array.from({ length: Math.min(PARALLEL, work.length) }, worker));
@@ -343,6 +350,7 @@ export class TileStore {
     }
     const tiles = names.map(n => this.tile(n));
     await Promise.all(tiles.map(t => this.open(t)));
+    if (tiles.some(t => t.missing(0, 200).length)) this.onProgress?.(0, 0); // how much isn't known yet
 
     // what the cells' positions take: the header, the checksum table at the end (the engine checks
     // it on opening), and the index of every section a box touches
@@ -390,7 +398,7 @@ export class TileStore {
     }
     const work = [];
     for (const [t, blocks] of planned) for (const [a, b] of runs([...blocks])) work.push([t, a, b]);
-    await this.fetchRuns(work);
+    await this.fetchRuns(work, true);
     this.flush();
     this.stats.prefetchMs = performance.now() - t0;
   }

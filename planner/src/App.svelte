@@ -442,7 +442,7 @@
       {#if planner.isEmpty}
         <Icon name="search" size={18} /> <span class="sheet-placeholder">Search</span>
       {:else}
-        <RouteSummary route={planner.route} locating={planner.waitingForLocation} />
+        <RouteSummary route={planner.route} locating={planner.waitingForLocation} download={planner.engineDownload} />
       {/if}
     </button>
     {#if !planner.isEmpty}
@@ -473,7 +473,7 @@
   </div>
 
   <div class="card-section route-section">
-    <RouteSummary route={planner.route} locating={planner.waitingForLocation} />
+    <RouteSummary route={planner.route} locating={planner.waitingForLocation} download={planner.engineDownload} />
     {#if planner.route.status === 'ready' && planner.route.tracks.length > 1}
       <Pills label="Routes" value={String(planner.route.selected)} onchoose={(id) => planner.chooseRoute(Number(id))}
              options={planner.route.tracks.map((track, index) => ({ id: String(index), title: routeTitle(track.length, index) }))} />

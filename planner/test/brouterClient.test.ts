@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'vitest';
 import fixtureText from './fixtures/brouter-far-side-via.json?raw';
 import { BRouterClient, RoutingError } from '../src/core/brouterClient';
-import { EngineUnavailable, type EngineRequest, type LocalBRouter } from '../src/core/localBRouter';
+import { EngineUnavailable, withinEngineReach, type EngineRequest, type LocalBRouter } from '../src/core/localBRouter';
 import type { Waypoint } from '../src/core/route';
 
 type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>;
@@ -199,10 +199,34 @@ describe('the on-device engine in front of brouter.de', () => {
     expect(nowhere.requests).toHaveLength(0);
   });
 
-  test("BRouter's reason for no route is shown without the exception's name, and brouter.de isn't asked", async () => {
-    const local = engine(() => 'error: java.lang.IllegalArgumentException: from-position not mapped in existing datafile');
+  test("BRouter's reason for no route is shown in its own words, and brouter.de isn't asked", async () => {
+    const local = engine(() => 'error: routing("from-position not mapped in existing datafile")');
     const client = new BRouterClient({ profileText, fetch: nowhere.fetch, engine: local.engine });
     await expect(client.route(points, 'road')).rejects.toThrow(new RoutingError('from-position not mapped in existing datafile'));
+  });
+
+  test('a search that reaches a tile we lack goes to brouter.de', async () => {
+    const local = engine(() => 'error: missingSegment("E10_N45.rd5")');
+    const brouter = server((url) => (url.pathname.endsWith('/profile') ? uploaded('custom_1') : new Response(straight)));
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch, engine: local.engine });
+    expect((await client.route(points, 'cycling')).length).toBe(1800);
+    expect(brouter.routes()).toHaveLength(1);
+  });
+
+  test('part of a plan beyond its reach goes to brouter.de without asking it', async () => {
+    const local = engine(() => straight);
+    const brouter = server((url) => (url.pathname.endsWith('/profile') ? uploaded('custom_1') : new Response(straight)));
+    const client = new BRouterClient({ profileText, fetch: brouter.fetch, engine: local.engine });
+    await client.route(points, 'cycling', { onDevice: false });
+    expect(local.requests).toHaveLength(0);
+    expect(brouter.routes()).toHaveLength(1);
+  });
+
+  test('its reach is 150 km in straight lines, over all of a plan', () => {
+    const berlin = { latitude: 52.52, longitude: 13.40 };
+    expect(withinEngineReach([berlin, { latitude: 52.52, longitude: 15.0 }])).toBe(true); // 108 km
+    expect(withinEngineReach([berlin, { latitude: 52.52, longitude: 15.0 }, berlin])).toBe(false); // 216 km
+    expect(withinEngineReach([berlin, { latitude: 51.05, longitude: 13.74 }, { latitude: 50.0, longitude: 14.42 }])).toBe(false);
   });
 
   test('when the engine can\'t answer, brouter.de routes', async () => {
