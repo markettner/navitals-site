@@ -13,6 +13,8 @@
 (function () {
   "use strict";
 
+  const BRAND_RED = '#FF0000'; // brand:red (tools/brand in the app repo)
+
   class TrailMap {
     constructor(getProps) { this.getProps = getProps; }
     get props() { return this.getProps(); }
@@ -40,7 +42,7 @@
         water: '#0B2740', shore: '#123A5C', river: 12,
         track: '#C9D3C2', trackOp: 0.34, path: '#D7E0D0', pathOp: 0.3, cycle: '#7A63D6', cycleOp: 0.45,
         roadCase: '#2B2108', road: '#5E4A16', minorCase: '#1E241E', minor: '#384036',
-        red: '#FB2A2A', redCase: '#5E0A07', glow: 'rgba(255,59,48,0.22)'
+        red: BRAND_RED, redCase: '#5E0A07', glow: 'rgba(255,59,48,0.22)'
       };
       return {
         night: false, base: '#93CC3E', fields: ['#9CD33A', '#A6D84B', '#B0DC5E', '#97CF3C', '#A9D953', '#BBE06C'],
@@ -50,7 +52,7 @@
         water: '#5DBDF0', shore: '#3FA6DE', river: 12,
         track: '#FFF9E3', trackOp: 0.95, path: '#FFFFFF', pathOp: 0.92, cycle: '#8A6CF0', cycleOp: 0.5,
         roadCase: '#E3A72A', road: '#FFD94D', minorCase: '#C9C7B4', minor: '#FFFDF4',
-        red: '#FB2A2A', redCase: '#A8130E', glow: ''
+        red: BRAND_RED, redCase: '#A8130E', glow: ''
       };
     }
 

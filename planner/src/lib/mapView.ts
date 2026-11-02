@@ -37,9 +37,9 @@ const positionSource = 'planner-position';
 const locationSource = 'planner-location';
 const zonesSource = 'planner-zones';
 /** The app's accent, which is the planned route's colour there. */
-const routeColor = '#E03A3E';
+const routeColor = '#FF0000'; // brand:red (tools/brand in the app repo)
 /** The rider's puck: the site's red heart in a white ring (trailmap.js), and its accuracy in red. */
-const locationColor = '#FB2A2A';
+const locationColor = '#FF0000'; // brand:red
 const heartPath = 'M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.6 4.5c2.1 0 3.6 1.1 4.4 2.6.8-1.5 2.3-2.6 4.4-2.6 3.6 0 5.7 3.8 4.2 7.3C19.5 16.4 12 21 12 21z';
 /** The pen's ink: the app's orange, apart from the route's red. */
 const penColor = '#FF9500';
