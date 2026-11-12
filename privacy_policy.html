@@ -81,10 +81,10 @@
             <h2>Online services</h2>
             <p>With map packs downloaded, Navitals plans and navigates without any connection. When you’re online, it uses these services, each of which receives your device’s IP address with the request:</p>
             <ul>
-                <li><strong>Map tiles</strong> from <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>, for the area of the map you’re looking at.</li>
+                <li><strong>Map tiles</strong> from <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>, for the area of the map you’re looking at, and along a planned route for the street names in its directions.</li>
+                <li><strong>Terrain</strong> from the <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener noreferrer">AWS Open Data terrain tiles</a>, for the map’s hill shading and the climbs of a route.</li>
                 <li><strong>Search</strong> by <a href="https://photon.komoot.io" target="_blank" rel="noopener noreferrer">Photon</a> (komoot): what you type, and the centre of the map, so nearby results come first.</li>
-                <li><strong>Route details</strong> from the FOSSGIS Valhalla server: the line of a route, to look up its road surfaces and estimate how long it takes.</li>
-                <li><strong>Map packs and route overlays</strong>, downloaded from GitHub.</li>
+                <li><strong>Route data, map packs and route overlays</strong>, downloaded from GitHub, or from Cloudflare R2 when GitHub can’t be reached.</li>
                 <li><strong>Weather</strong> from Apple’s WeatherKit, for where a ride takes place, saved with the ride.</li>
             </ul>
             <p>None of these requests contain your name, an account or anything that identifies you beyond the IP address.</p>
