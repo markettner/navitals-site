@@ -37,6 +37,36 @@
       }
     },
     {
+      "about": "Stops with names of their own, a bend without, and a name with characters the hash itself uses",
+      "hash": "route=gravel;52.52192,13.41321;52.49300,13.45900,s;52.44000,13.64500&names=Alexanderplatz;;Caf%C3%A9%3B+Bar,+am+See&name=Zum+See",
+      "plan": {
+        "sport": "gravel",
+        "points": [
+          {
+            "latitude": 52.52192,
+            "longitude": 13.41321,
+            "kind": "stop",
+            "name": "Alexanderplatz"
+          },
+          {
+            "latitude": 52.493,
+            "longitude": 13.459,
+            "kind": "shaping"
+          },
+          {
+            "latitude": 52.44,
+            "longitude": 13.645,
+            "kind": "stop",
+            "name": "Café; Bar, am See"
+          }
+        ],
+        "alternative": 0,
+        "avoid": [],
+        "without": [],
+        "name": "Zum See"
+      }
+    },
+    {
       "about": "The third route offered, and a name with characters the hash itself uses",
       "hash": "route=mountainBike;52.51627,13.37770;52.47512,13.29800;52.51627,13.37770&alt=2&name=Mauerweg+%26+more,+S%C3%BCd/West+%23r%C3%BCck",
       "plan": {
@@ -163,6 +193,68 @@
           "ferries",
           "steps"
         ],
+        "name": null
+      }
+    },
+    {
+      "about": "Names for fewer points than the route has are left out whole",
+      "hash": "route=cycling;52.5,13.4;52.45,13.45;52.4,13.5&names=Start;Ziel",
+      "plan": {
+        "sport": "cycling",
+        "points": [
+          {
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.45,
+            "longitude": 13.45,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.4,
+            "longitude": 13.5,
+            "kind": "stop"
+          }
+        ],
+        "alternative": 0,
+        "avoid": [],
+        "without": [],
+        "name": null
+      }
+    },
+    {
+      "about": "A bend's name, a blank one and the sender's position are passed over; a name is trimmed",
+      "hash": "route=road;52.5,13.4;52.45,13.45,s;52.42,13.47;52.4,13.5&names=My+Location;Puschkinallee;+;+Ziel%3B+Ost+",
+      "plan": {
+        "sport": "road",
+        "points": [
+          {
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.45,
+            "longitude": 13.45,
+            "kind": "shaping"
+          },
+          {
+            "latitude": 52.42,
+            "longitude": 13.47,
+            "kind": "stop"
+          },
+          {
+            "latitude": 52.4,
+            "longitude": 13.5,
+            "kind": "stop",
+            "name": "Ziel; Ost"
+          }
+        ],
+        "alternative": 0,
+        "avoid": [],
+        "without": [],
         "name": null
       }
     }

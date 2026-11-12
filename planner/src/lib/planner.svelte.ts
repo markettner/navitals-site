@@ -74,6 +74,11 @@ export function droppedPin(point: Coordinate, kind: Stop['kind'] = 'stop'): Plac
   };
 }
 
+/** A dropped pin search hasn't named, whose name is its coordinates. */
+function isUnnamedPin(place: Place): boolean {
+  return place.id.startsWith('at:') && !place.originalName;
+}
+
 function named(point: NamedPoint): Place {
   return {
     id: `gpx:${point.latitude},${point.longitude}`, name: point.name, subtitle: '', latitude: point.latitude, longitude: point.longitude, kind: 'other',
@@ -255,15 +260,20 @@ export class Planner {
     return [start, ...places, ...rest.slice(-1)];
   }
 
-  /** What the address keeps, for a planned route: the sport, the points, the route chosen among
-   *  those offered, what it keeps out of and its name. A line has no plan. */
+  /** What the address keeps, for a planned route: the sport, the points and the stops' names, the
+   *  route chosen among those offered, what it keeps out of and its name. A line has no plan. */
   get planState(): PlanState | null {
-    const points = this.waypoints;
-    if (this.line || points.length < 2) return null;
+    const placed = this.stops.filter((stop) => stop.place);
+    if (this.line || placed.length < 2) return null;
     const route = this.route;
     return {
       sport: this.sport,
-      points: points.map(({ latitude, longitude, kind }) => ({ latitude, longitude, kind: kind === 'shaping' ? 'shaping' : 'stop' })),
+      points: placed.map((stop) => {
+        const { latitude, longitude, name } = stop.place!;
+        // A pin still named by its coordinates, and "My Location", are named by search on the other side.
+        const own = stop.kind === 'stop' && !stop.current && !isUnnamedPin(stop.place!);
+        return { latitude, longitude, kind: stop.kind, ...(own ? { name } : {}) };
+      }),
       alternative: this.wantedAlternative || (route.status === 'ready' ? route.selected : 0),
       avoid: this.avoid,
       without: this.without,
@@ -561,15 +571,20 @@ export class Planner {
 
   // ---------- Opening a plan ----------
 
-  /** A plan from the address: the points, named again by search, kept out of what it was kept out
-   *  of, and once the alternatives come, the route it chose among them. */
+  /** A plan from the address: the points, named again by search (a stop the link names keeps its
+   *  name), kept out of what it was kept out of, and once the alternatives come, the route it chose
+   *  among them. */
   open(state: PlanState): void {
     this.naming?.abort();
     this.record();
     this.line = null;
     this.planName = state.name;
     this.sport = state.sport;
-    this.stops = state.points.map((point) => newStop(droppedPin(point, point.kind), point.kind));
+    // A stop the link names keeps that name over what search finds, as one the rider renamed.
+    this.stops = state.points.map((point) => {
+      const pin = droppedPin(point, point.kind);
+      return newStop(point.name ? renamed(pin, point.name) : pin, point.kind);
+    });
     this.avoid = state.avoid;
     this.without = state.without;
     this.zones = [];

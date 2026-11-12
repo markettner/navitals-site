@@ -20,6 +20,7 @@ import workerURL from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import type { FeatureCollection } from 'geojson';
 import { distance, insertionIndex, prefix, project, stopPositions, suffix, type Coordinate } from '../core/geodesy';
 import { labelAnchors } from '../core/labels';
+import { viewIn, withView } from '../core/urlState';
 import { darkStyles, styleURL } from '../mapStyles';
 import { layerIDs, nameExpression, overlayKinds, overlaySource, type OverlayKind } from './overlays';
 import type { Stop, Zone } from './planner.svelte';
@@ -127,15 +128,30 @@ export class MapView {
   /** `credits`: the page's own credits (Credits.svelte), placed where MapLibre's would be. */
   constructor(container: HTMLElement, style: string, private readonly events: MapEvents, credits: HTMLElement) {
     this.shownStyle = style;
+    // Berlin until the hash says otherwise; the hash keeps the view across reloads and in links.
+    // Written here rather than by MapLibre's `hash` option, which decodes the rest of the address.
+    const view = viewIn(location.hash);
     this.map = new maplibregl.Map({
       container,
       style: styleURL(style),
-      // Berlin until the hash says otherwise; the hash keeps the view across reloads and in links.
-      center: [13.405, 52.52],
-      zoom: 11,
-      hash: 'map',
+      center: view ? [view.longitude, view.latitude] : [13.405, 52.52],
+      zoom: view?.zoom ?? 11,
+      bearing: view?.bearing ?? 0,
+      pitch: view?.pitch ?? 0,
       attributionControl: false,
     });
+    this.map.on('moveend', () => {
+      const hash = withView(location.hash, this.viewText());
+      if (`#${hash}` !== location.hash) history.replaceState(history.state, '', `${location.pathname}${location.search}#${hash}`);
+    });
+    // A view pasted into the address moves the map there.
+    const followHash = () => {
+      const pasted = viewIn(location.hash);
+      if (!pasted || new URLSearchParams(location.hash.slice(1)).get('map') === this.viewText()) return;
+      this.map.jumpTo({ center: [pasted.longitude, pasted.latitude], zoom: pasted.zoom, bearing: pasted.bearing, pitch: pasted.pitch });
+    };
+    window.addEventListener('hashchange', followHash);
+    this.map.once('remove', () => window.removeEventListener('hashchange', followHash));
     this.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
     this.map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
     // Our credits instead of MapLibre's: every style has the same sources, and MapLibre's box,
@@ -378,6 +394,19 @@ export class MapView {
       center: [point.longitude, point.latitude], zoom: Math.max(this.map.getZoom(), 14),
       offset: [(padding.left - padding.right) / 2, (padding.top - padding.bottom) / 2],
     });
+  }
+
+  /** The view as MapLibre's hash wrote it: zoom to hundredths, the centre to well under a pixel,
+   *  and the bearing and pitch when the map is turned or tilted. */
+  private viewText(): string {
+    const center = this.map.getCenter();
+    const zoom = Math.round(this.map.getZoom() * 100) / 100;
+    const scale = 10 ** Math.ceil((zoom * Math.LN2 + Math.log(512 / 360 / 0.5)) / Math.LN10);
+    const bearing = this.map.getBearing(), pitch = this.map.getPitch();
+    let text = `${zoom}/${Math.round(center.lat * scale) / scale}/${Math.round(center.lng * scale) / scale}`;
+    if (bearing || pitch) text += `/${Math.round(bearing * 10) / 10}`;
+    if (pitch) text += `/${Math.round(pitch)}`;
+    return text;
   }
 
   private easeToRider(options: maplibregl.EaseToOptions): void {
